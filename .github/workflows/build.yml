@@ -1,0 +1,43 @@
+name: Marketplace and admin build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_CF_FETCH_ENABLED: 'false'
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm run install:ci
+      - name: Test financial rules and database access
+        run: npm test
+      - name: Check TypeScript
+        run: npm run typecheck
+      - name: Build marketplace, admin and APIs
+        run: npm run build
+      - name: Upload deployable Worker build
+        uses: actions/upload-artifact@v4
+        with:
+          name: marketplace-worker-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14

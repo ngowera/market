@@ -1,0 +1,2 @@
+import {createClient} from '@supabase/supabase-js';
+export async function subscribeListing(id:string,onChange:()=>void){const r=await fetch('/api/public-config');if(!r.ok)return ()=>{};const c:any=await r.json();const client=createClient(c.url,c.key,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});const channel=client.channel('catalog:'+id).on('postgres_changes',{event:'UPDATE',schema:'public',table:'public_catalog',filter:'id=eq.'+id},onChange).subscribe();return ()=>{void client.removeChannel(channel)}}
