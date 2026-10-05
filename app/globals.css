@@ -179,7 +179,7 @@ small {
   margin-top: 2px;
 }
 .brand-mark {
-  background: #087c68;
+  background: #fff;
   color: #fff;
   height: 42px;
   width: 42px;
@@ -191,11 +191,10 @@ small {
   position: relative;
   letter-spacing: -2px;
 }
-.brand-mark > span {
-  font-size: 20px;
-  position: absolute;
-  top: 0;
-  right: 4px;
+.brand-mark > img {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 .public-header nav {
   display: flex;

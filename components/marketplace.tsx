@@ -49,8 +49,8 @@ const icons = [
 export function Brand() {
   return (
     <Link href="/" className="brand">
-      <span className="brand-mark">
-        C<span>↗</span>
+      <span className="brand-mark" aria-hidden="true">
+        <img src="/logo.svg" alt="" width="42" height="42" />
       </span>
       <span>
         CMRP<small>COLLATERAL MARKETPLACE</small>
