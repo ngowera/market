@@ -1,0 +1,1 @@
+import Link from 'next/link';import {Header,Footer} from '@/components/marketplace';export default function NotFound(){return <><Header/><main className="empty-state"><h1>Asset not found</h1><p style={{margin:'20px 0'}}>This listing may have ended or is not available.</p><Link className="btn primary" href="/browse">Browse available assets</Link></main><Footer/></>}
