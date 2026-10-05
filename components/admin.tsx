@@ -137,7 +137,7 @@ const previewOrders = [
   },
 ];
 export default function Admin({ connected }: { connected: boolean }) {
-  const [demo, setDemo] = useState(!connected);
+  const [demo, setDemo] = useState(false);
   const [view, setView] = useState("Dashboard");
   const [staff, setStaff] = useState<any>(null);
   const [query, setQuery] = useState("");
@@ -243,14 +243,12 @@ export default function Admin({ connected }: { connected: boolean }) {
     URL.revokeObjectURL(a.href);
     if (!demo) write("export", { report: view });
   }
-  if (connected && !staff && !demo)
+  if (!staff && !demo)
     return (
       <>
         <header className="public-header">
           <Brand />
-          <button className="btn secondary" onClick={() => setDemo(true)}>
-            View sample workspace
-          </button>
+          <Link className="btn secondary" href="/">Browse marketplace</Link>
         </header>
         <Account
           staff

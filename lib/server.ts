@@ -31,9 +31,9 @@ export async function sb(
   });
   const body: any = await r.json().catch(() => null);
   if (!r.ok)
-    throw new Error(
+    throw Object.assign(new Error(
       body?.message || body?.error_description || "Request failed",
-    );
+    ), { code: body?.code });
   return body;
 }
 export async function getPublicListings(): Promise<{
@@ -41,10 +41,16 @@ export async function getPublicListings(): Promise<{
   demo: boolean;
 }> {
   if (!config().url || !config().key) return { listings: samples, demo: true };
-  const listings = await sb(
-    "/rest/v1/public_catalog?select=*&status=in.(live,reserved,sold)&order=created_at.desc",
-  );
-  return { listings, demo: false };
+  try {
+    const listings = await sb(
+      "/rest/v1/public_catalog?select=*&status=in.(live,reserved,sold)&order=created_at.desc",
+    );
+    return { listings, demo: false };
+  } catch (error) {
+    if ((error as {code?: string}).code === "PGRST205")
+      return { listings: [], demo: false };
+    throw error;
+  }
 }
 export async function currentUser(request: Request) {
   const cookie = request.headers.get("cookie") || "";

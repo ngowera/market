@@ -8,10 +8,10 @@ create function auth.uid() returns uuid language sql stable as $$select nullif(c
 create function auth.jwt() returns jsonb language sql stable as $$select coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb$$;
 grant usage on schema auth to anon,authenticated,service_role;grant execute on all functions in schema auth to anon,authenticated,service_role;
 create schema storage;create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);create table storage.objects(id uuid primary key,bucket_id text);alter table storage.objects enable row level security;`);
-const file=(await fs.readdir('supabase/migrations')).find(x=>x.endsWith('_cmrp_foundation.sql'));
-const sql=(await fs.readFile('supabase/migrations/'+file,'utf8')).replace('create extension if not exists pgcrypto;','');
+const sql=(await fs.readFile('supabase/setup.sql','utf8')).replace('create extension if not exists pgcrypto;','');
 await db.exec(sql);
-console.log('PASS: migration executes on PostgreSQL');
+await db.exec(sql);
+console.log('PASS: SQL installer executes and safely reruns on PostgreSQL');
 const maker='11111111-1111-4111-8111-111111111111',approver='22222222-2222-4222-8222-222222222222',buyer='33333333-3333-4333-8333-333333333333',other='44444444-4444-4444-8444-444444444444';
 await db.exec(`insert into auth.users(id,email,email_confirmed_at) values('${maker}','maker@test.invalid',now()),('${approver}','approver@test.invalid',now()),('${buyer}','buyer@test.invalid',now()),('${other}','other@test.invalid',now());
 insert into public.staff_profiles(user_id,full_name,security_level,is_active) values('${maker}','Maker',2,true),('${approver}','Approver',3,true);
