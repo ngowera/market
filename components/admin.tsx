@@ -16,6 +16,8 @@ import {
   Settings,
   ArrowUpRight,
   ArrowRight,
+  Pencil,
+  Trash2,
   ChevronRight,
   ShieldCheck,
   Bell,
@@ -111,6 +113,8 @@ export default function Admin({ connected }: { connected: boolean }) {
   const [success, setSuccess] = useState("");
   const [records, setRecords] = useState<any>({});
   const [loading, setLoading] = useState(false);
+  const [selectedListingIds, setSelectedListingIds] = useState<string[]>([]);
+  const [archiveSelection, setArchiveSelection] = useState<string[]>([]);
   useEffect(() => {
     if (connected)
       fetch("/api/session")
@@ -131,8 +135,14 @@ export default function Admin({ connected }: { connected: boolean }) {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [staff, view, success]);
+  useEffect(() => {
+    if (view !== "Listings") setSelectedListingIds([]);
+  }, [view]);
   const listings = records.listings || [];
   const assets = records.assets || [];
+  const filteredListingRows = listings.filter(
+    (listing: any) => (listing.title || "").toLowerCase().includes(query.toLowerCase()),
+  );
   const collateralRows = assets.map((asset: any) => {
     const listing = (records.asset_listings || []).find(
       (candidate: any) =>
@@ -186,12 +196,20 @@ export default function Admin({ connected }: { connected: boolean }) {
           ? `Cash collection code: ${d.release_code}. Verify the collector before handover.`
           : d.order_no
             ? `Cash sale recorded as ${d.order_no}. The item is sold; request collection approval before handover.`
+            : path === "edit-listing"
+              ? "Listing updated and the public page refreshed."
+              : path === "archive-listings"
+                ? `${d.archived_count} listing${d.archived_count === 1 ? "" : "s"} removed from the public website.`
               : path === "listing"
                 ? level >= 4
                   ? "Listing published and visible on the public website."
                   : "Listing submitted for independent approval. It will appear on the public website automatically once approved."
                 : d.message || "Action recorded successfully.",
       );
+      if (path === "archive-listings") {
+        setSelectedListingIds([]);
+        setArchiveSelection([]);
+      }
       setModal("");
       setPending(null);
     } catch (e) {
@@ -561,17 +579,35 @@ export default function Admin({ connected }: { connected: boolean }) {
                   />
                 </label>
                 <span className="badge">
-                  Authorized records
+                  {view === "Listings" ? `${listings.length} listings` : "Authorized records"}
                 </span>
+                {view === "Listings" && level >= 4 && selectedListingIds.length > 0 && (
+                  <button
+                    className="btn secondary listing-delete-selected"
+                    type="button"
+                    onClick={() => setArchiveSelection(selectedListingIds)}
+                  >
+                    <Trash2 size={15} />
+                    Delete selected ({selectedListingIds.length})
+                  </button>
+                )}
               </div>
               <AssetsTable
-                rows={(view === "Collateral" ? collateralRows : listings).filter(
+                rows={(view === "Listings" ? filteredListingRows : view === "Collateral" ? collateralRows : listings).filter(
                   (r: any) =>
-                    (r.title || "")
-                      .toLowerCase()
-                      .includes(query.toLowerCase()) &&
                     (view !== "Auctions" || r.method.includes("auction")),
                 )}
+                selectionEnabled={view === "Listings" && level >= 4}
+                selectedIds={selectedListingIds}
+                onSelectionChange={(id, checked) =>
+                  setSelectedListingIds((current) =>
+                    checked ? [...new Set([...current, id])] : current.filter((value) => value !== id),
+                  )
+                }
+                onSelectAll={(checked) =>
+                  setSelectedListingIds(checked ? filteredListingRows.map((listing: any) => listing.id) : [])
+                }
+                onEdit={view === "Listings" && level >= 4 ? (listing) => open("listing-edit", listing) : undefined}
                 onOpen={(r) => open("asset-detail", r)}
                 onCashSale={
                   ["Collateral", "Listings"].includes(view) && level >= 3
@@ -686,8 +722,15 @@ export default function Admin({ connected }: { connected: boolean }) {
                 </p>
               </div>
               <DataPanel
-                rows={orders.filter((o: any) => o.status === "paid")}
-                columns={["order_no", "public_title", "amount_due", "status"]}
+                rows={orders.filter((o: any) => o.status === "paid").map((order: any) => ({
+                  ...order,
+                  release_status: order.release_record?.status === "approved"
+                    ? "ready_for_handover"
+                    : order.release_approval
+                      ? "pending_approval"
+                      : "approval_required",
+                }))}
+                columns={["order_no", "public_title", "amount_due", "release_status", "status"]}
                 onOpen={(r) => open("release", r)}
               />
             </>
@@ -1085,6 +1128,15 @@ export default function Admin({ connected }: { connected: boolean }) {
                 {busy ? "Recording cash sale…" : "Record cash sale"}
               </button>
             </form>
+          ) : modal === "listing-edit" ? (
+            <ListingEditForm
+              key={selected?.id}
+              selected={selected}
+              busy={busy}
+              onSubmit={(values) =>
+                write("edit-listing", { listing_id: selected.id, ...values })
+              }
+            />
           ) : [
               "asset",
               "listing",
@@ -1135,38 +1187,91 @@ export default function Admin({ connected }: { connected: boolean }) {
               </button>
             </form>
           ) : modal === "release" ? (
-            <form
-              className="form-grid"
-              onSubmit={(e) => {
-                e.preventDefault();
-                write("release", {
-                  order_id: selected.id,
-                  ...Object.fromEntries(new FormData(e.currentTarget)),
-                });
-              }}
-            >
-              <b>{selected?.order_no}</b>
-              <label>
-                Collector name
-                <input name="collector_name" required />
-              </label>
-              <label>
-                Masked identity reference
-                <input name="collector_ref" required />
-              </label>
-              <label>
-                Release code
-                <input name="release_code" />
-              </label>
-              <label>
-                Handover notes
-                <textarea name="notes" required />
-              </label>
-              <button className="btn primary" disabled={busy}>
-                Confirm approved handover
-              </button>
-              <button type="button" className="btn secondary" disabled={busy} onClick={(e)=>{const form=(e.currentTarget as HTMLButtonElement).form!;const body=Object.fromEntries(new FormData(form));if(!body.collector_name||!body.collector_ref){setError('Collector name and identity reference are required.');return;}write('prepare-release',{order_id:selected.id,...body,reason:'Collection identity checked; request independent release approval.'})}}>Request release approval</button>
-            </form>
+            <div className="form-grid">
+              <b>{selected?.order_no} · {selected?.public_title}</b>
+              <p className="account-stat">
+                Payment verified: {money(selected?.amount_due || 0)}. Verify the named collector and their identity before handing over the asset.
+              </p>
+              {selected?.release_record?.status === "approved" ? (
+                <form
+                  className="form-grid"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    write("release", {
+                      order_id: selected.id,
+                      ...Object.fromEntries(new FormData(event.currentTarget)),
+                    });
+                  }}
+                >
+                  <label>
+                    Approved collector
+                    <input name="collector_name" defaultValue={selected.release_record.collector_name} required />
+                  </label>
+                  <label>
+                    Approved masked identity reference
+                    <input name="collector_ref" defaultValue={selected.release_record.collector_ref} required />
+                  </label>
+                  <label>
+                    Single-use collection code from the buyer
+                    <input name="release_code" autoComplete="one-time-code" required />
+                  </label>
+                  <p className="muted">
+                    The buyer receives this code in their account notification after approval. Ask them to present it at handover.
+                  </p>
+                  <label>
+                    Handover notes
+                    <textarea name="notes" required minLength={3} />
+                  </label>
+                  {selected.release_record.approved_by === staff?.user_id ? (
+                    <p className="error" role="alert">
+                      A different staff member must record the handover than the person who approved this release.
+                    </p>
+                  ) : (
+                    <button className="btn primary" disabled={busy}>
+                      {busy ? "Recording handover…" : "Confirm handover"}
+                    </button>
+                  )}
+                </form>
+              ) : selected?.release_approval ? (
+                <div className="release-state-note" role="status">
+                  <ShieldCheck size={18} />
+                  <div>
+                    <b>Waiting for independent approval</b>
+                    <p>Collector: {selected.release_approval.proposed_values?.collector_name}. Open Approvals to have a different Level 3 or 4 staff member decide it.</p>
+                    <button className="text-button" onClick={() => { setModal(""); setView("Approvals"); }}>
+                      Go to Approvals <ArrowRight size={13} />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <form
+                  className="form-grid"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    write("prepare-release", {
+                      order_id: selected.id,
+                      ...Object.fromEntries(new FormData(event.currentTarget)),
+                      reason: "Collection identity checked; request independent release approval.",
+                    });
+                  }}
+                >
+                  <p className="muted">
+                    Request approval after checking the collector’s identity. The approver must be a different eligible staff member.
+                  </p>
+                  <label>
+                    Collector name
+                    <input name="collector_name" required maxLength={120} />
+                  </label>
+                  <label>
+                    Masked identity reference
+                    <input name="collector_ref" placeholder="e.g. ID-***-4821" required maxLength={120} />
+                  </label>
+                  <button className="btn primary" disabled={busy}>
+                    {busy ? "Requesting approval…" : "Request release approval"}
+                  </button>
+                </form>
+              )}
+            </div>
           ) : modal === "settlement" ? (
             <>
               <div className="spec-list">
@@ -1214,6 +1319,35 @@ export default function Admin({ connected }: { connected: boolean }) {
           {error && <p className="error">{error}</p>}
         </DialogContent>
       </Dialog>
+      <AlertDialog
+        open={archiveSelection.length > 0}
+        onOpenChange={(open) => {
+          if (!open) setArchiveSelection([]);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Remove {archiveSelection.length} selected listing{archiveSelection.length === 1 ? "" : "s"} from the website?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              They will be archived, not erased from the audit history. Listings with bids, active orders, or completed sales cannot be removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {error && <p className="error">{error}</p>}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <button
+              className="btn secondary listing-delete-selected"
+              disabled={busy}
+              onClick={() => write("archive-listings", { listing_ids: archiveSelection })}
+            >
+              <Trash2 size={15} />
+              {busy ? "Removing…" : "Remove selected listings"}
+            </button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <AlertDialog
         open={!!pending}
         onOpenChange={(v) => {
@@ -1285,6 +1419,7 @@ const descriptions: Record<string, string> = {
 const modalTitle: Record<string, string> = {
   asset: "Add collateral",
   listing: "Prepare listing",
+  "listing-edit": "Edit public listing",
   authorization: "Request sale authorization",
   staff: "Staff access request",
   "fee-rule": "Propose a fee rule",
@@ -1304,22 +1439,178 @@ function Empty({ text }: { text: string }) {
     </div>
   );
 }
+function ListingEditForm({
+  selected,
+  busy,
+  onSubmit,
+}: {
+  selected: any;
+  busy: boolean;
+  onSubmit: (values: any) => void;
+}) {
+  const initialImages = Array.isArray(selected?.images) && selected.images.length
+    ? selected.images
+    : selected?.image
+      ? [selected.image]
+      : [];
+  const [photos, setPhotos] = useState<{ url: string; path: string }[]>(
+    initialImages.map((photo: any) => ({ url: typeof photo === "string" ? photo : photo.url, path: "" })),
+  );
+  const [uploading, setUploading] = useState(false);
+  const [photoError, setPhotoError] = useState("");
+
+  async function uploadPhotos(input: HTMLInputElement) {
+    const files = Array.from(input.files || []);
+    if (!files.length) return;
+    if (photos.length + files.length > 10) {
+      setPhotoError("A listing can have up to 10 photos.");
+      input.value = "";
+      return;
+    }
+    if (files.some((file) => file.size > 5 * 1024 * 1024)) {
+      setPhotoError("Each photo must be 5 MB or smaller.");
+      input.value = "";
+      return;
+    }
+    setPhotoError("");
+    setUploading(true);
+    try {
+      const uploaded: { url: string; path: string }[] = [];
+      for (const file of files) {
+        const data = new FormData();
+        data.set("file", file);
+        data.set("purpose", "listing");
+        const response = await fetch("/api/admin/listing-image", { method: "POST", body: data });
+        const result: any = await response.json();
+        if (!response.ok) throw Error(result.error);
+        uploaded.push({ url: result.image, path: result.storage_path });
+      }
+      setPhotos((current) => [...current, ...uploaded]);
+    } catch (error) {
+      setPhotoError((error as Error).message);
+    } finally {
+      setUploading(false);
+      input.value = "";
+    }
+  }
+
+  return (
+    <form
+      className="form-grid"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!photos.length) {
+          setPhotoError("Keep or upload at least one listing photo.");
+          return;
+        }
+        onSubmit({
+          ...Object.fromEntries(new FormData(event.currentTarget)),
+          images: photos.map((photo) => photo.url),
+          reason: "Level 4 staff updated listing details",
+        });
+      }}
+    >
+      <label>
+        Public title
+        <input name="title" defaultValue={selected.public_title || selected.title || ""} required maxLength={180} />
+      </label>
+      <label>
+        Public page address
+        <input name="slug" defaultValue={selected.slug || ""} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" required maxLength={180} />
+      </label>
+      <label>
+        Public description
+        <textarea name="description" defaultValue={selected.public_description || selected.description || ""} maxLength={5000} />
+      </label>
+      <label>
+        {selected.method?.includes("auction") ? "Starting bid / buy-now price (MWK)" : "Price (MWK)"}
+        <input name="price" type="number" min="1" step="0.01" defaultValue={selected.method?.includes("auction") ? selected.starting_bid ?? selected.price ?? "" : selected.price ?? selected.fixed_price ?? ""} required />
+      </label>
+      <label>
+        Collection point
+        <input name="collection_point" defaultValue={selected.collection_point || selected.location || ""} required maxLength={300} />
+      </label>
+      <label>
+        Condition
+        <NativePick name="condition_grade" values={["New", "Excellent", "Good", "Fair"]} defaultValue={selected.condition_grade || "Good"} />
+      </label>
+      <label>
+        Known defects
+        <textarea name="defects" defaultValue={selected.defects || ""} maxLength={2000} />
+      </label>
+      <label>
+        Listing photos (JPEG, PNG or WebP; up to 10 photos, 5 MB each)
+        <input
+          type="file"
+          multiple
+          accept="image/jpeg,image/png,image/webp"
+          disabled={uploading || busy || photos.length >= 10}
+          onChange={(event) => uploadPhotos(event.currentTarget)}
+        />
+        {uploading && <span className="muted">Uploading photos…</span>}
+        {photoError && <span className="error" role="alert">{photoError}</span>}
+        <div className="image-preview-list">
+          {photos.map((photo, index) => (
+            <div className="image-preview" key={`${photo.url}-${index}`}>
+              <img src={photo.url} alt={`Listing photo ${index + 1}`} />
+              <button
+                type="button"
+                className="image-preview-cancel"
+                aria-label={`Remove listing photo ${index + 1}`}
+                title="Remove photo"
+                onClick={() => setPhotos((current) => current.filter((_, photoIndex) => photoIndex !== index))}
+              >
+                <X size={16} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </label>
+      <button className="btn primary" disabled={busy || uploading || !photos.length}>
+        {busy ? "Saving…" : "Save listing"}
+      </button>
+    </form>
+  );
+}
+
 function AssetsTable({
   rows,
   onOpen,
   onCashSale,
   onChangePrice,
+  selectionEnabled = false,
+  selectedIds = [],
+  onSelectionChange,
+  onSelectAll,
+  onEdit,
 }: {
   rows: any[];
   onOpen: (r: any) => void;
   onCashSale?: (r: any) => void;
   onChangePrice?: (r: any) => void;
+  selectionEnabled?: boolean;
+  selectedIds?: string[];
+  onSelectionChange?: (id: string, checked: boolean) => void;
+  onSelectAll?: (checked: boolean) => void;
+  onEdit?: (r: any) => void;
 }) {
+  const allSelected = rows.length > 0 && rows.every((row) => selectedIds.includes(row.id));
   return (
     <div className="data-table-wrap">
       <Table className="data-table">
         <TableHeader>
           <TableRow>
+            {selectionEnabled && (
+              <TableHead className="listing-select-cell">
+                <input
+                  className="listing-select-checkbox"
+                  type="checkbox"
+                  aria-label="Select all visible listings"
+                  checked={allSelected}
+                  onChange={(event) => onSelectAll?.(event.target.checked)}
+                />
+              </TableHead>
+            )}
             <TableHead>Asset</TableHead>
             <TableHead>Loan / asset reference</TableHead>
             <TableHead>Sale method</TableHead>
@@ -1330,7 +1621,18 @@ function AssetsTable({
         </TableHeader>
         <TableBody>
           {rows.map((r) => (
-            <TableRow key={r.id}>
+            <TableRow key={r.id} className={selectedIds.includes(r.id) ? "listing-row-selected" : undefined}>
+              {selectionEnabled && (
+                <TableCell className="listing-select-cell">
+                  <input
+                    className="listing-select-checkbox"
+                    type="checkbox"
+                    aria-label={`Select ${r.title || "listing"}`}
+                    checked={selectedIds.includes(r.id)}
+                    onChange={(event) => onSelectionChange?.(r.id, event.target.checked)}
+                  />
+                </TableCell>
+              )}
               <TableCell>
                 <div className="table-asset">
                   <img
@@ -1365,6 +1667,17 @@ function AssetsTable({
                 <Status status={r.status} />
               </TableCell>
               <TableCell>
+                {onEdit && (
+                  <button
+                    className="listing-edit-button"
+                    type="button"
+                    aria-label={`Edit ${r.title || "listing"}`}
+                    title="Edit listing and photos"
+                    onClick={() => onEdit(r)}
+                  >
+                    <Pencil size={16} />
+                  </button>
+                )}
                 {onChangePrice && r.status === "live" && (
                   <button
                     className="table-actions"
@@ -1414,7 +1727,7 @@ function Status({ status }: { status: string }) {
     <span
       className={
         "badge " +
-        (["paid", "live", "listed", "approved", "released", "closed"].includes(
+        (["paid", "live", "listed", "approved", "released", "closed", "ready_for_handover"].includes(
           status,
         )
           ? "green"
@@ -1423,6 +1736,8 @@ function Status({ status }: { status: string }) {
                 "pending_approval",
                 "awaiting_payment",
                 "sale_review",
+                "pending_approval",
+                "approval_required",
               ].includes(status)
             ? "amber"
             : status === "failed"
@@ -1460,7 +1775,7 @@ function DataPanel({
               <TableRow key={r.id || index}>
                 {columns.map((c) => (
                   <TableCell key={c}>
-                    {c === "status" ? (
+                    {c === "status" || c === "release_status" ? (
                       <Status status={r[c]} />
                     ) : ["amount", "amount_due", "gross_sale"].includes(c) ? (
                       money(r[c])

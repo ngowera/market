@@ -1316,6 +1316,68 @@ footer a:not(.brand) {
   font-size: 13px;
   line-height: 1.55;
 }
+.listing-select-cell {
+  width: 42px;
+  min-width: 42px;
+  padding-left: 12px !important;
+  padding-right: 4px !important;
+}
+.listing-select-checkbox {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #16866a;
+  opacity: 0;
+  cursor: pointer;
+}
+.data-table thead .listing-select-checkbox {
+  opacity: 1;
+}
+.data-table tbody tr:hover .listing-select-checkbox,
+.data-table tbody tr:focus-within .listing-select-checkbox,
+.listing-select-checkbox:checked,
+.listing-select-cell .listing-select-checkbox:focus-visible {
+  opacity: 1;
+}
+.listing-row-selected {
+  background: #edf7f3;
+}
+.listing-edit-button {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  margin-right: 7px;
+  border: 1px solid #d8e3e6;
+  border-radius: 5px;
+  background: #fff;
+  color: #315b50;
+  cursor: pointer;
+  vertical-align: middle;
+}
+.listing-edit-button:hover {
+  background: #edf7f3;
+  border-color: #a9cec1;
+}
+.listing-delete-selected {
+  color: #a52a2a;
+}
+.release-state-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 15px;
+  border-left: 3px solid #3273a0;
+  background: #eef5f9;
+  color: #254d66;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.release-state-note p {
+  margin: 5px 0 10px;
+  color: #617986;
+}
 .admin-sidebar-bottom {
   padding: 28px 24px;
   color: #91aebd;

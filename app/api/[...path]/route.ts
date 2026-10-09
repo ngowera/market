@@ -165,13 +165,19 @@ async function get(request: Request, path: string) {
       "system_settings",
     ];
     if (staff.security_level >= 2)
-      names.push("collateral_assets", "sale_authorizations", "offers", "listings");
+      names.push("collateral_assets", "sale_authorizations", "offers", "listings", "auctions", "release_orders");
     if (staff.security_level === 4) names.push("staff_profiles");
     const rows = await Promise.all(
       names.map((n) =>
         sb(
           "/rest/v1/" + n + "?select=" +
-            (n === "listings" ? "id,asset_id,status,method,fixed_price" : "*") +
+            (n === "listings"
+              ? "id,asset_id,sale_authorization_id,slug,method,status,public_title,public_description,fixed_price,collection_point,condition_grade,defects,image,images,created_at,publish_at"
+              : n === "auctions"
+                ? "listing_id,starting_bid,current_price,min_increment,ends_at"
+                : n === "release_orders"
+                  ? "id,order_id,status,collector_name,collector_ref,approved_by,approved_at,released_at,released_by"
+                : "*") +
             "&limit=200",
           {},
           token,
@@ -179,6 +185,37 @@ async function get(request: Request, path: string) {
       ),
     );
     const d = Object.fromEntries(names.map((n, i) => [n, rows[i]]));
+    if (staff.security_level >= 2 && d.listings) {
+      const assetsById = new Map((d.collateral_assets || []).map((asset: any) => [asset.id, asset]));
+      const catalogById = new Map((d.public_catalog || []).map((listing: any) => [listing.id, listing]));
+      const auctionsById = new Map((d.auctions || []).map((auction: any) => [auction.listing_id, auction]));
+      d.listings = d.listings.map((listing: any) => {
+        const asset: any = assetsById.get(listing.asset_id) || {};
+        const catalog: any = catalogById.get(listing.id) || {};
+        const auction: any = auctionsById.get(listing.id) || {};
+        return {
+          ...catalog,
+          ...listing,
+          title: listing.public_title,
+          price: listing.method.includes("auction")
+            ? auction.current_price ?? auction.starting_bid ?? catalog.price
+            : listing.fixed_price ?? catalog.price,
+          starting_bid: auction.starting_bid,
+          location: listing.collection_point,
+          category: asset.category ?? catalog.category,
+          asset_ref: asset.asset_ref ?? catalog.asset_ref,
+          external_loan_id: asset.external_loan_id ?? catalog.external_loan_id,
+          currency: listing.currency || asset.currency || "MWK",
+          valuation_amount: asset.valuation_amount,
+        };
+      });
+    }
+    const releaseByOrder = new Map((d.release_orders || []).map((release: any) => [release.order_id, release]));
+    const pendingReleaseByOrder = new Map(
+      (d.approval_requests || [])
+        .filter((approval: any) => approval.action_type === "release" && approval.status === "pending")
+        .map((approval: any) => [approval.entity_id, approval]),
+    );
     if (staff.security_level >= 2 && d.collateral_assets) {
       const media = await sb(
         "/rest/v1/asset_media?media_type=eq.public_image&select=asset_id,storage_path,sort_order&order=sort_order.asc&limit=500",
@@ -203,7 +240,7 @@ async function get(request: Request, path: string) {
       });
     }
     return json({
-      listings: d.public_catalog,
+      listings: d.listings || d.public_catalog,
       assets: d.collateral_assets || d.public_catalog,
       asset_listings: d.listings || [],
       authorizations: d.sale_authorizations || [],
@@ -211,6 +248,8 @@ async function get(request: Request, path: string) {
       orders: (d.orders || []).map((order: any) => ({
         ...order,
         public_title: d.public_catalog.find((listing: any) => listing.id === order.listing_id)?.title || "—",
+        release_record: releaseByOrder.get(order.id) || null,
+        release_approval: pendingReleaseByOrder.get(order.id) || null,
       })),
       settlements: d.settlements,
       logs: await rpc("admin_audit_log", {}, token),
@@ -606,7 +645,7 @@ async function post(request: Request, path: string) {
   }
   if (path.startsWith("admin/")) {
     const action = path.slice(6);
-    const min = ["staff", "settings", "fee-rule"].includes(action)
+    const min = ["staff", "settings", "fee-rule", "edit-listing", "archive-listings"].includes(action)
       ? 4
       : ["approve", "offer", "settlement", "cash-sale"].includes(action)
         ? 3
@@ -640,6 +679,50 @@ async function post(request: Request, path: string) {
       return json(await rpc("create_asset", { p_values: b }, token));
     if (action === "listing")
       return json(await rpc("create_listing", { p_values: b }, token));
+    if (action === "edit-listing") {
+      const d = z
+        .object({
+          listing_id: uuid,
+          title: z.string().trim().min(1).max(180),
+          slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(180),
+          description: z.string().max(5000),
+          price: amount,
+          collection_point: z.string().trim().min(1).max(300),
+          condition_grade: z.enum(["New", "Excellent", "Good", "Fair"]),
+          defects: z.string().max(2000),
+          images: z.array(z.string().url()).max(10),
+          reason: z.string().trim().min(3).max(500),
+        })
+        .parse(b);
+      return json(
+        await rpc(
+          "update_listing",
+          {
+            p_listing: d.listing_id,
+            p_values: {
+              title: d.title,
+              slug: d.slug,
+              description: d.description,
+              price: d.price,
+              collection_point: d.collection_point,
+              condition_grade: d.condition_grade,
+              defects: d.defects,
+              images: d.images,
+              reason: d.reason,
+            },
+          },
+          token,
+        ),
+      );
+    }
+    if (action === "archive-listings") {
+      const d = z
+        .object({
+          listing_ids: z.array(uuid).min(1).max(50).refine((ids) => new Set(ids).size === ids.length),
+        })
+        .parse(b);
+      return json(await rpc("archive_listings", { p_listings: d.listing_ids }, token));
+    }
     if (action === "price-change") {
       const d = z
         .object({
