@@ -8,7 +8,7 @@ declare conflict_name text;
 begin
   perform pg_advisory_xact_lock(20261005,182742);
   if to_regclass('public.cmrp_installation') is not null then
-    if exists(select 1 from public.cmrp_installation where version='20261009280000_listing_management.sql') then
+    if exists(select 1 from public.cmrp_installation where version='20261009290000_active_settings_policy.sql') then
       raise notice 'CMRP already installed; no changes made'; return;
     end if;
     raise exception 'Different CMRP version installed. Use migrations instead.';
@@ -2144,11 +2144,47 @@ as $$select private.archive_listings(p_listings)$$;
 
 grant execute on function private.update_listing(uuid,jsonb),private.archive_listings(uuid[]) to authenticated;
 grant execute on function public.update_listing(uuid,jsonb),public.archive_listings(uuid[]) to authenticated;
+create or replace function private.apply_high_value_release_policy()
+returns trigger
+language plpgsql
+security definer
+set search_path=''
+as $$
+declare
+  release_amount numeric;
+  release_threshold numeric;
+begin
+  if new.action_type<>'release' then
+    return new;
+  end if;
+
+  select amount_due into release_amount
+  from public.orders
+  where id=new.entity_id;
+
+  select coalesce((settings->>'high_value_threshold')::numeric,5000000)
+  into release_threshold
+  from public.system_settings
+  order by created_at desc
+  limit 1;
+
+  if release_amount is not null and release_threshold is not null
+     and release_amount>=release_threshold then
+    new.required_min_level=4;
+  end if;
+  return new;
+end
+$$;
+
+drop trigger if exists high_value_release_policy on public.approval_requests;
+create trigger high_value_release_policy
+before insert on public.approval_requests
+for each row execute function private.apply_high_value_release_policy();
 $cmrp_schema$;
   create table public.cmrp_installation(version text primary key,installed_at timestamptz not null default now());
   alter table public.cmrp_installation enable row level security;
   revoke all on public.cmrp_installation from public,anon,authenticated;
-  insert into public.cmrp_installation(version) values('20261009280000_listing_management.sql');
+  insert into public.cmrp_installation(version) values('20261009290000_active_settings_policy.sql');
 end
 $cmrp_installer$;
 notify pgrst, 'reload schema';

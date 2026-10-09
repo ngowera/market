@@ -1378,6 +1378,82 @@ footer a:not(.brand) {
   margin: 5px 0 10px;
   color: #617986;
 }
+.settings-panel-heading {
+  margin-bottom: 12px;
+}
+.settings-panel-heading h2 {
+  margin: 0;
+}
+.settings-panel-heading p,
+.settings-updated {
+  margin: 6px 0 0;
+  color: #83939b;
+  font-size: 11px;
+}
+.settings-approval-note,
+.settings-warning {
+  margin: 0;
+  padding: 11px 13px;
+  border-left: 3px solid #3273a0;
+  background: #eef5f9;
+  color: #315b70;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.settings-warning {
+  margin: 14px 0;
+  border-color: #bd812e;
+  background: #fff7e8;
+  color: #765522;
+}
+.settings-policy-scope {
+  margin: 0;
+  font-size: 11px;
+}
+.settings-pending {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 20px;
+  padding: 13px;
+  border: 1px solid #ecd9a9;
+  border-radius: 6px;
+  background: #fff9eb;
+  color: #765522;
+  font-size: 12px;
+}
+.settings-pending p {
+  margin: 5px 0 0;
+  color: #927d56;
+}
+.settings-history {
+  margin-top: 18px;
+  border-top: 1px solid #e2e9ec;
+  padding-top: 12px;
+  color: #536c79;
+  font-size: 12px;
+}
+.settings-history summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.settings-history ul {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+.settings-history li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid #edf1f2;
+  color: #82939b;
+}
+.settings-history li b {
+  color: #536c79;
+}
 .admin-sidebar-bottom {
   padding: 28px 24px;
   color: #91aebd;

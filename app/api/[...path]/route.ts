@@ -166,23 +166,29 @@ async function get(request: Request, path: string) {
     ];
     if (staff.security_level >= 2)
       names.push("collateral_assets", "sale_authorizations", "offers", "listings", "auctions", "release_orders");
-    if (staff.security_level === 4) names.push("staff_profiles");
+    if (staff.security_level === 4) names.push("staff_profiles", "fee_rules");
     const rows = await Promise.all(
-      names.map((n) =>
-        sb(
-          "/rest/v1/" + n + "?select=" +
-            (n === "listings"
-              ? "id,asset_id,sale_authorization_id,slug,method,status,public_title,public_description,fixed_price,collection_point,condition_grade,defects,image,images,created_at,publish_at"
-              : n === "auctions"
-                ? "listing_id,starting_bid,current_price,min_increment,ends_at"
-                : n === "release_orders"
-                  ? "id,order_id,status,collector_name,collector_ref,approved_by,approved_at,released_at,released_by"
-                : "*") +
-            "&limit=200",
-          {},
-          token,
-        ),
-      ),
+      names.map((n) => {
+        const columns =
+          n === "system_settings"
+            ? "version,settings,created_at,approved_by"
+            : n === "fee_rules"
+              ? "version,platform_bps,fixed_fee,effective_at,approved_by,is_active"
+              : n === "listings"
+                ? "id,asset_id,sale_authorization_id,slug,method,status,public_title,public_description,fixed_price,collection_point,condition_grade,defects,image,images,created_at,publish_at"
+                : n === "auctions"
+                  ? "listing_id,starting_bid,current_price,min_increment,ends_at"
+                  : n === "release_orders"
+                    ? "id,order_id,status,collector_name,collector_ref,approved_by,approved_at,released_at,released_by"
+                    : "*";
+        const ordering =
+          n === "system_settings"
+            ? "&order=created_at.desc&limit=20"
+            : n === "fee_rules"
+              ? "&order=effective_at.desc&limit=100"
+              : "&limit=200";
+        return sb("/rest/v1/" + n + "?select=" + columns + ordering, {}, token);
+      }),
     );
     const d = Object.fromEntries(names.map((n, i) => [n, rows[i]]));
     if (staff.security_level >= 2 && d.listings) {
@@ -256,6 +262,12 @@ async function get(request: Request, path: string) {
       staff: d.staff_profiles,
       offers: d.offers,
       settings: d.system_settings,
+      fee_rules: d.fee_rules || [],
+      connections: {
+        supabase: Boolean(config().url && config().key),
+        paychangu: Boolean(env("PAYCHANGU_SECRET_KEY") && env("PAYCHANGU_WEBHOOK_SECRET")),
+        loan_bridge: Boolean(env("LOAN_API_URL") && env("LOAN_API_TOKEN") && env("INTEGRATION_JOB_SECRET")),
+      },
       ...(await rpc("dashboard_metrics",{},token)),
     });
   }
@@ -809,6 +821,30 @@ async function post(request: Request, path: string) {
         "prepare-release",
       ].includes(action)
     ) {
+      let values = b;
+      if (action === "settings") {
+        const parsed = z
+          .object({
+            high_value_threshold: z.coerce.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+            extension_window: z.coerce.number().int().min(1).max(3600),
+            extension_seconds: z.coerce.number().int().min(1).max(3600),
+            max_extensions: z.coerce.number().int().min(0).max(100),
+            reason: z.string().trim().min(3).max(500),
+          })
+          .parse(b);
+        values = parsed;
+      }
+      if (action === "fee-rule") {
+        values = z
+          .object({
+            version: z.string().trim().min(1).max(40),
+            platform_bps: z.coerce.number().int().min(0).max(10000),
+            fixed_fee: z.coerce.number().min(0).max(Number.MAX_SAFE_INTEGER),
+            effective_at: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).transform((date) => new Date(`${date}T00:00:00.000Z`).toISOString()),
+            reason: z.string().trim().min(3).max(500),
+          })
+          .parse(b);
+      }
       const names: Record<string, string> = {
         staff: "staff_change",
         settings: "settings_change",
@@ -829,7 +865,7 @@ async function post(request: Request, path: string) {
                   : action === "prepare-release"
                     ? uuid.parse(b.order_id)
                     : crypto.randomUUID(),
-            p_values: b,
+            p_values: values,
           },
           token,
         ),

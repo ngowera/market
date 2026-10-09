@@ -178,6 +178,18 @@ export default function Admin({ connected }: { connected: boolean }) {
       : postedLoanCount
         ? `${postedLoanCount} postings complete · none pending`
         : "No pending loan postings";
+  const currentPolicy = records.settings?.[0]?.settings || {
+    high_value_threshold: 5000000,
+    extension_window: 120,
+    extension_seconds: 120,
+    max_extensions: 20,
+  };
+  const pendingPolicyChanges = approvals.filter(
+    (request: any) => request.status === "pending" && ["settings_change", "fee_change"].includes(request.action_type),
+  );
+  const activeFeeRule = (records.fee_rules || []).find(
+    (rule: any) => rule.is_active && new Date(rule.effective_at).getTime() <= Date.now(),
+  );
   const level = staff?.security_level || 0;
   const write = async (path: string, body: any) => {
     setBusy(true);
@@ -902,8 +914,22 @@ export default function Admin({ connected }: { connected: boolean }) {
           {view === "Configuration" && (
             <div className="admin-settings">
               <div className="panel">
-                <h2>Approval & auction policy</h2>
+                <div className="panel-head settings-panel-heading">
+                  <div>
+                    <h2>Approval & auction policy</h2>
+                    <p>Active values come from the latest approved policy.</p>
+                  </div>
+                  <span className="badge green">
+                    {records.settings?.[0]?.approved_by ? "Approved policy" : "System defaults"}
+                  </span>
+                </div>
+                {records.settings?.[0]?.created_at && (
+                  <p className="settings-updated">
+                    Effective since {new Date(records.settings[0].created_at).toLocaleString()}
+                  </p>
+                )}
                 <form
+                  key={records.settings?.[0]?.version || "system-defaults"}
                   className="form-grid"
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -918,17 +944,22 @@ export default function Admin({ connected }: { connected: boolean }) {
                     <input
                       type="number"
                       name="high_value_threshold"
-                      defaultValue="5000000"
+                      defaultValue={currentPolicy.high_value_threshold}
                       min="0"
+                      step="1"
+                      required
                     />
+                    <span className="muted">Releases at or above this amount require Level 4 approval. Enter 0 to require Level 4 approval for every release.</span>
                   </label>
                   <label>
                     Extension window (seconds)
                     <input
                       type="number"
                       name="extension_window"
-                      defaultValue="120"
+                      defaultValue={currentPolicy.extension_window}
                       min="1"
+                      max="3600"
+                      required
                     />
                   </label>
                   <label>
@@ -936,8 +967,10 @@ export default function Admin({ connected }: { connected: boolean }) {
                     <input
                       type="number"
                       name="extension_seconds"
-                      defaultValue="120"
+                      defaultValue={currentPolicy.extension_seconds}
                       min="1"
+                      max="3600"
+                      required
                     />
                   </label>
                   <label>
@@ -945,47 +978,92 @@ export default function Admin({ connected }: { connected: boolean }) {
                     <input
                       type="number"
                       name="max_extensions"
-                      defaultValue="20"
+                      defaultValue={currentPolicy.max_extensions}
                       min="0"
+                      max="100"
+                      required
                     />
                   </label>
-                  <button className="btn primary">Request policy change</button>
-                  <p className="muted" style={{ fontSize: 11 }}>
-                    Changes create a versioned approval request.
+                  <p className="muted settings-policy-scope">
+                    Auction timing changes apply to new auctions only. Auctions already running keep the timing values saved when they were created.
+                  </p>
+                  <label>
+                    Reason for this policy proposal
+                    <textarea name="reason" minLength={3} maxLength={500} required placeholder="Explain why the institution needs this change." />
+                  </label>
+                  <button className="btn primary" disabled={busy}>
+                    {busy ? "Submitting proposal…" : "Submit policy for approval"}
+                  </button>
+                  <p className="settings-approval-note">
+                    Submitting creates a pending proposal. It does not change active settings until a different Level 4 administrator approves it.
                   </p>
                 </form>
+                {pendingPolicyChanges.length > 0 && (
+                  <div className="settings-pending">
+                    <div>
+                      <b>{pendingPolicyChanges.length} policy proposal{pendingPolicyChanges.length === 1 ? "" : "s"} awaiting approval</b>
+                      <p>Active settings stay unchanged until approval.</p>
+                    </div>
+                    <button className="text-button" onClick={() => setView("Approvals")}>
+                      Review proposals <ArrowRight size={13} />
+                    </button>
+                  </div>
+                )}
+                {(records.settings || []).length > 1 && (
+                  <details className="settings-history">
+                    <summary>Recent approved policy versions</summary>
+                    <ul>
+                      {records.settings.slice(0, 5).map((version: any) => (
+                        <li key={version.version}>
+                          <span>{new Date(version.created_at).toLocaleString()}</span>
+                          <b>{version.approved_by ? "Approved" : "System default"}</b>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
               </div>
               <div className="panel">
                 <h2>Connections & fee rules</h2>
                 <div className="spec-list">
                   <div>
                     <span>Supabase</span>
-                    <span className="badge">
-                      {connected ? "Configured" : "Awaiting anon key"}
+                    <span className={"badge " + (records.connections?.supabase ?? connected ? "green" : "amber")}>
+                      {records.connections?.supabase ?? connected ? "Connected" : "Not configured"}
                     </span>
                   </div>
                   <div>
                     <span>PayChangu</span>
-                    <span className="badge amber">Server secret required</span>
+                    <span className={"badge " + (records.connections?.paychangu ? "green" : "amber")}>
+                      {records.connections?.paychangu ? "Credentials configured" : "Credentials missing"}
+                    </span>
                   </div>
                   <div>
                     <span>Loan bridge</span>
-                    <span className="badge amber">API contract required</span>
+                    <span className={"badge " + (records.connections?.loan_bridge ? "green" : "amber")}>
+                      {records.connections?.loan_bridge ? "Credentials configured" : "Credentials missing"}
+                    </span>
                   </div>
                   <div>
                     <span>Platform commission</span>
-                    <b>Versioned · disabled by default</b>
+                    <b>{activeFeeRule
+                      ? `${(Number(activeFeeRule.platform_bps) / 100).toFixed(2)}% + ${money(activeFeeRule.fixed_fee)} (${activeFeeRule.version})`
+                      : "No active approved fee rule"}</b>
                   </div>
                 </div>
                 <p className="account-stat" style={{ marginTop: 20 }}>
-                  Credentials stay in server configuration. Fee changes require
-                  a new rule version and never alter historical settlements.
+                  Credentials remain server-side and are never shown here. Fee changes create a new version and do not alter historical settlements.
                 </p>
+                {!activeFeeRule && (
+                  <p className="settings-warning" role="status">
+                    No effective fee rule is active. Verified payments cannot finalize settlement until an approved rule is effective.
+                  </p>
+                )}
                 <button
                   className="text-button"
                   onClick={() => open("fee-rule")}
                 >
-                  Propose fee rule
+                  <Plus size={14} /> Propose fee rule
                 </button>
               </div>
             </div>
