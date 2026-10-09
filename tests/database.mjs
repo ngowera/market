@@ -19,6 +19,8 @@ const collateralImagesMigration=await fs.readFile('supabase/migrations/202610092
 await db.exec(collateralImagesMigration);
 const listingGalleriesMigration=await fs.readFile('supabase/migrations/20261009240000_listing_image_galleries.sql','utf8');
 await db.exec(listingGalleriesMigration);
+const level4ListingMigration=await fs.readFile('supabase/migrations/20261009250000_level4_direct_listing_publish.sql','utf8');
+await db.exec(level4ListingMigration);
 console.log('PASS: SQL installer executes and safely reruns on PostgreSQL');
 const maker='11111111-1111-4111-8111-111111111111',approver='22222222-2222-4222-8222-222222222222',buyer='33333333-3333-4333-8333-333333333333',other='44444444-4444-4444-8444-444444444444',noMfaStaff='55555555-5555-4555-8555-555555555555';
 await db.exec(`insert into auth.users(id,email,email_confirmed_at) values('${maker}','maker@test.invalid',now()),('${approver}','approver@test.invalid',now()),('${buyer}','buyer@test.invalid',now()),('${other}','other@test.invalid',now()),('${noMfaStaff}','no-mfa@test.invalid',now());
@@ -108,4 +110,26 @@ await as('authenticated',maker);
 const gradedListing=(await db.query(`select public.create_listing('${JSON.stringify({asset_id:gradedAsset.id,sale_authorization_id:gradeAuthorizationId,slug:'condition-grade-test',method:'fixed_price',title:'Condition grade test',description:'Test public description',price:'1000',collection_point:'Blantyre office',terms_version:'test-v1',image:'https://example.invalid/grade.webp',condition_grade:'Fair',defects:'None',reason:'Condition grade test'})}') as d`)).rows[0].d;
 assert.equal(gradedListing.condition_grade,'Fair');
 console.log('PASS: asset and listing condition grades persist through their admin RPCs');
+
+const level4Asset=(await db.query(`select public.create_asset('${JSON.stringify({title:'Level 4 direct listing asset',category:'Other',valuation_amount:'5000',currency:'MWK',custody_location:'Blantyre office',image_paths:['assets/level4-direct.webp'],reason:'Level 4 listing test'})}') as d`)).rows[0].d;
+const level4Authorization=(await db.query(`select public.request_authorization('${level4Asset.id}','{"basis":"Level 4 listing test","reference_no":"AUTH-L4-DIRECT","reason":"Test authorization","evidence_path":"evidence/l4-direct.pdf"}') as d`)).rows[0].d;
+await as('authenticated',approver);await db.query(`select public.approve_action('${level4Authorization.id}','approved','Sale authorization approved')`);
+const level4AuthorizationId=(await db.query(`select id from public.sale_authorizations where asset_id='${level4Asset.id}'`)).rows[0].id;
+await as('authenticated',noMfaStaff,'aal1');
+const level4Listing=(await db.query(`select public.create_listing('${JSON.stringify({asset_id:level4Asset.id,sale_authorization_id:level4AuthorizationId,slug:'level4-direct-listing',method:'fixed_price',title:'Level 4 direct listing',description:'Published without a second listing approval.',price:'5000',collection_point:'Blantyre office',terms_version:'test-v1',images:['https://example.invalid/l4-front.webp','https://example.invalid/l4-side.webp'],reason:'Level 4 direct publication'})}') as d`)).rows[0].d;
+assert.equal(level4Listing.status,'live');assert.equal(level4Listing.approved_by,noMfaStaff);
+await as('anon');const level4PublicListing=(await db.query(`select * from public.public_catalog where id='${level4Listing.id}'`)).rows[0];assert.equal(level4PublicListing.title,'Level 4 direct listing');assert.equal(level4PublicListing.images.length,2);
+await db.exec('reset role');assert.equal((await db.query(`select count(*)::integer as count from public.approval_requests where entity_id='${level4Listing.id}' and action_type='publish_listing'`)).rows[0].count,0);
+console.log('PASS: Level 4 listings publish immediately with no listing approval request');
+
+await as('authenticated',maker);
+const level3Asset=(await db.query(`select public.create_asset('${JSON.stringify({title:'Level 3 reviewed listing asset',category:'Other',valuation_amount:'6000',currency:'MWK',custody_location:'Blantyre office',image_paths:['assets/level3-reviewed.webp'],reason:'Level 3 listing test'})}') as d`)).rows[0].d;
+const level3Authorization=(await db.query(`select public.request_authorization('${level3Asset.id}','{"basis":"Level 3 listing test","reference_no":"AUTH-L3-REVIEW","reason":"Test authorization","evidence_path":"evidence/l3-review.pdf"}') as d`)).rows[0].d;
+await as('authenticated',approver);await db.query(`select public.approve_action('${level3Authorization.id}','approved','Sale authorization approved')`);
+const level3AuthorizationId=(await db.query(`select id from public.sale_authorizations where asset_id='${level3Asset.id}'`)).rows[0].id;
+const level3Listing=(await db.query(`select public.create_listing('${JSON.stringify({asset_id:level3Asset.id,sale_authorization_id:level3AuthorizationId,slug:'level3-reviewed-listing',method:'fixed_price',title:'Level 3 reviewed listing',description:'Awaiting independent publication approval.',price:'6000',collection_point:'Blantyre office',terms_version:'test-v1',image:'https://example.invalid/l3-front.webp',reason:'Level 3 listing review'})}') as d`)).rows[0].d;
+assert.equal(level3Listing.status,'pending_approval');
+await as('anon');assert.equal((await db.query(`select * from public.public_catalog where id='${level3Listing.id}'`)).rows.length,0);
+await db.exec('reset role');const level3Request=(await db.query(`select * from public.approval_requests where entity_id='${level3Listing.id}' and action_type='publish_listing'`)).rows[0];assert.equal(level3Request.requested_by,approver);assert.equal(level3Request.required_min_level,3);
+console.log('PASS: Level 3 listings remain hidden pending independent Level 3 approval');
 await db.close();console.log('All database security and workflow tests passed.');
