@@ -165,10 +165,18 @@ async function get(request: Request, path: string) {
       "system_settings",
     ];
     if (staff.security_level >= 2)
-      names.push("collateral_assets", "sale_authorizations", "offers");
+      names.push("collateral_assets", "sale_authorizations", "offers", "listings");
     if (staff.security_level === 4) names.push("staff_profiles");
     const rows = await Promise.all(
-      names.map((n) => sb("/rest/v1/" + n + "?select=*&limit=200", {}, token)),
+      names.map((n) =>
+        sb(
+          "/rest/v1/" + n + "?select=" +
+            (n === "listings" ? "id,asset_id,status,method,fixed_price" : "*") +
+            "&limit=200",
+          {},
+          token,
+        ),
+      ),
     );
     const d = Object.fromEntries(names.map((n, i) => [n, rows[i]]));
     if (staff.security_level >= 2 && d.collateral_assets) {
@@ -197,6 +205,7 @@ async function get(request: Request, path: string) {
     return json({
       listings: d.public_catalog,
       assets: d.collateral_assets || d.public_catalog,
+      asset_listings: d.listings || [],
       authorizations: d.sale_authorizations || [],
       approvals: d.approval_requests,
       orders: (d.orders || []).map((order: any) => ({

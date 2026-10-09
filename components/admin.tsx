@@ -75,6 +75,15 @@ import {
 import { Brand, Pick } from "./marketplace";
 import Account from "./account";
 import { money, methodName } from "@/lib/catalog";
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 const navigation = [
   ["Dashboard", LayoutDashboard],
   ["Collateral", Boxes],
@@ -124,8 +133,41 @@ export default function Admin({ connected }: { connected: boolean }) {
   }, [staff, view, success]);
   const listings = records.listings || [];
   const assets = records.assets || [];
+  const collateralRows = assets.map((asset: any) => {
+    const listing = (records.asset_listings || []).find(
+      (candidate: any) =>
+        candidate.asset_id === asset.id &&
+        candidate.status === "live" &&
+        ["fixed_price", "fixed_plus_offer"].includes(candidate.method),
+    );
+    return {
+      ...asset,
+      cash_sale_candidate: true,
+      cash_sale_listing: listing
+        ? { ...listing, title: asset.title, price: listing.fixed_price }
+        : null,
+    };
+  });
   const approvals = records.approvals || [];
   const orders = records.orders || [];
+  const attention = records.attention || {};
+  const chartData = Array.isArray(records.chart) ? records.chart : [];
+  const pendingApprovalCount = Number(
+    attention.pending_approvals ?? approvals.filter((a: any) => a.status === "pending").length,
+  );
+  const awaitingCollectionCount = Number(
+    attention.awaiting_collection ?? orders.filter((o: any) => o.status === "paid").length,
+  );
+  const pendingLoanCount = Number(attention.loan_pending || 0);
+  const deadLetterLoanCount = Number(attention.loan_dead_letter || 0);
+  const postedLoanCount = Number(attention.loan_posted || 0);
+  const loanIntegrationSummary = deadLetterLoanCount
+    ? `${deadLetterLoanCount} failed · ${pendingLoanCount} pending`
+    : pendingLoanCount
+      ? `${pendingLoanCount} awaiting loan posting`
+      : postedLoanCount
+        ? `${postedLoanCount} postings complete · none pending`
+        : "No pending loan postings";
   const level = staff?.security_level || 0;
   const write = async (path: string, body: any) => {
     setBusy(true);
@@ -410,20 +452,33 @@ export default function Admin({ connected }: { connected: boolean }) {
                     <span>LAST 6 MONTHS</span>
                   </div>
                   <div className="recovery-chart">
-                    {(records.chart || []).map((m: any) => (
-                      <div className="chart-column" key={m.month}>
-                        <div
-                          style={{ height: m.amount + "%" }}
-                          title={m.month + ": " + m.amount}
+                    <ResponsiveContainer width="100%" height={230}>
+                      <LineChart data={chartData} margin={{ top: 12, right: 12, left: 8, bottom: 0 }}>
+                        <CartesianGrid stroke="#e4ecee" strokeDasharray="4 4" vertical={false} />
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "#82939b", fontSize: 10 }} />
+                        <YAxis
+                          width={88}
+                          axisLine={false}
+                          tickLine={false}
+                          domain={[0, (max: number) => max || 1]}
+                          tick={{ fill: "#82939b", fontSize: 9 }}
+                          tickFormatter={(value) => "MWK " + new Intl.NumberFormat("en-MW", { notation: "compact", maximumFractionDigits: 1 }).format(Number(value))}
                         />
-                        <span>{m.month}</span>
-                      </div>
-                    ))}
+                        <Tooltip formatter={(value) => money(Number(value))} />
+                        <Line type="monotone" dataKey="gross" name="Gross sales" stroke="#17866f" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
+                        <Line type="monotone" dataKey="recovered" name="Loan recovery" stroke="#3273a0" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
+                        <Line type="monotone" dataKey="surplus" name="Owner surplus" stroke="#bd812e" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
                   </div>
                   <div className="chart-legend">
-                    <i />
-                    Net loan recovery
+                    <span><i className="gross" />Gross sales</span>
+                    <span><i className="recovered" />Loan recovery</span>
+                    <span><i className="surplus" />Owner surplus</span>
                   </div>
+                  {!chartData.some((month: any) => Number(month.gross || month.recovered || month.surplus)) && (
+                    <p className="chart-empty">No finalized sales recorded in this period.</p>
+                  )}
                 </div>
                 <div className="panel">
                   <div className="panel-head">
@@ -435,20 +490,21 @@ export default function Admin({ connected }: { connected: boolean }) {
                       [
                         ShieldCheck,
                         "Pending approvals",
-                        approvals.length + " requests need a checker",
+                        pendingApprovalCount === 0
+                          ? "No requests waiting for a checker"
+                          : `${pendingApprovalCount} request${pendingApprovalCount === 1 ? "" : "s"} need a checker`,
                         "Approvals",
                       ],
                       [
                         PackageCheck,
                         "Awaiting collection",
-                        orders.filter((o: any) => o.status === "paid").length +
-                          " verified paid orders",
+                        `${awaitingCollectionCount} verified paid order${awaitingCollectionCount === 1 ? "" : "s"} awaiting handover`,
                         "Release desk",
                       ],
                       [
                         Link2,
                         "Loan integration",
-                        "Review recovery posting status",
+                        loanIntegrationSummary,
                         "Settlements",
                       ],
                     ].map(([Icon, title, text, target]: any) => (
@@ -509,7 +565,7 @@ export default function Admin({ connected }: { connected: boolean }) {
                 </span>
               </div>
               <AssetsTable
-                rows={(view === "Collateral" ? assets : listings).filter(
+                rows={(view === "Collateral" ? collateralRows : listings).filter(
                   (r: any) =>
                     (r.title || "")
                       .toLowerCase()
@@ -518,8 +574,8 @@ export default function Admin({ connected }: { connected: boolean }) {
                 )}
                 onOpen={(r) => open("asset-detail", r)}
                 onCashSale={
-                  view === "Listings" && level >= 3
-                    ? (r) => open("cash-sale", r)
+                  ["Collateral", "Listings"].includes(view) && level >= 3
+                    ? (r) => open("cash-sale", r.cash_sale_listing || r)
                     : undefined
                 }
                 onChangePrice={
@@ -1041,6 +1097,7 @@ export default function Admin({ connected }: { connected: boolean }) {
               selected={selected}
               assets={assets}
               authorizations={records.authorizations || []}
+              level={level}
               busy={busy}
               onSubmit={(body) => write(modal, body)}
             />
@@ -1276,7 +1333,13 @@ function AssetsTable({
             <TableRow key={r.id}>
               <TableCell>
                 <div className="table-asset">
-                  <img src={r.image || "/favicon.svg"} alt="" />
+                  <img
+                    src={r.images?.[0]?.url || r.images?.[0] || r.image_path || r.image || "/favicon.svg"}
+                    alt={r.title ? `${r.title} photo` : "Collateral photo"}
+                    onError={(event) => {
+                      event.currentTarget.src = "/favicon.svg";
+                    }}
+                  />
                   <div>
                     {r.title}
                     <small>
@@ -1286,7 +1349,13 @@ function AssetsTable({
                 </div>
               </TableCell>
               <TableCell>{r.external_loan_id || r.asset_ref || "—"}</TableCell>
-              <TableCell>{methodName(r.method || "fixed")}</TableCell>
+              <TableCell>
+                {r.cash_sale_candidate
+                  ? r.cash_sale_listing
+                    ? methodName(r.cash_sale_listing.method)
+                    : "Not listed"
+                  : methodName(r.method || "fixed")}
+              </TableCell>
               <TableCell>
                 {r.price != null
                   ? money(r.price)
@@ -1313,13 +1382,19 @@ function AssetsTable({
                       : "Change price"}
                   </button>
                 )}
-                {onCashSale && r.status === "live" && !r.method?.includes("auction") && (
+                {onCashSale && (r.cash_sale_candidate || (r.status === "live" && !r.method?.includes("auction"))) && (
                   <button
                     className="table-actions"
                     style={{ marginRight: 10 }}
+                    disabled={r.cash_sale_candidate && !r.cash_sale_listing}
+                    title={
+                      r.cash_sale_candidate && !r.cash_sale_listing
+                        ? "Create and publish a fixed-price listing before recording a cash sale."
+                        : "Record the cash receipt and mark the asset sold."
+                    }
                     onClick={() => onCashSale(r)}
                   >
-                    Record cash
+                    {r.cash_sale_candidate ? "Mark sold" : "Record cash"}
                   </button>
                 )}
                 <button className="table-actions" onClick={() => onOpen(r)}>
@@ -1446,6 +1521,7 @@ function AdminForm({
   selected,
   assets = [],
   authorizations = [],
+  level = 0,
   busy,
   onSubmit,
 }: {
@@ -1453,6 +1529,7 @@ function AdminForm({
   selected: any;
   assets?: any[];
   authorizations?: any[];
+  level?: number;
   busy: boolean;
   onSubmit: (d: any) => void;
 }) {
@@ -1460,6 +1537,9 @@ function AdminForm({
     assets.some((asset) => asset.id === selected?.id) ? selected.id : "",
   );
   const [saleMethod, setSaleMethod] = useState(selected?.method || "fixed_price");
+  const [listingTitle, setListingTitle] = useState(selected?.title || "");
+  const [slug, setSlug] = useState(slugify(selected?.title || ""));
+  const [slugEdited, setSlugEdited] = useState(false);
   const [photos, setPhotos] = useState<{ url: string; path: string }[]>(
     type === "listing"
       ? selected?.images || (selected?.image ? [{ url: selected.image, path: "" }] : [])
@@ -1519,6 +1599,7 @@ function AdminForm({
       className="form-grid"
       onSubmit={(e) => {
         e.preventDefault();
+        if (type === "listing" && level < 4 && !matchingAuthorizations.length) return;
         if (type === "asset" && !photos.some((photo) => photo.path.startsWith("assets/"))) {
           setImageError("Upload at least one collateral image before saving.");
           return;
@@ -1533,6 +1614,15 @@ function AdminForm({
         });
       }}
     >
+      {type === "listing" && (
+        <p className="listing-workflow-note" role="status">
+          {level >= 4 ? (
+            <>Level {level} can publish directly without a sale authorization. If you choose to include one, it must already be approved for this asset.</>
+          ) : (
+            <>Your Level {level} access will submit this listing for independent approval. It will appear on the public website after approval.</>
+          )}
+        </p>
+      )}
       {type === "asset" ? (
         <>
           <label>
@@ -1653,6 +1743,9 @@ function AdminForm({
                 const nextPhotos = nextAsset?.images || (nextAsset?.image ? [{ url: nextAsset.image, path: "" }] : []);
                 setPhotos(nextPhotos);
                 setImageUrl(nextPhotos[0]?.url || "");
+                setListingTitle(nextAsset?.title || "");
+                setSlug(slugify(nextAsset?.title || ""));
+                setSlugEdited(false);
               }}
               required
             >
@@ -1667,17 +1760,21 @@ function AdminForm({
             </select>
           </label>
           <label>
-            Approved sale authorization
+            {level >= 4
+              ? "Approved sale authorization (optional)"
+              : "Approved sale authorization"}
             <select
               key={assetId}
               name="sale_authorization_id"
               defaultValue={matchingAuthorizations[0]?.id || ""}
-              required
+              required={level < 4}
             >
-              <option value="" disabled>
+              <option value="" disabled={level < 4}>
                 {matchingAuthorizations.length
                   ? "Select approved authorization"
-                  : "No approved authorization for this asset"}
+                  : level >= 4
+                    ? "No authorization needed for Level 4"
+                    : "No approved authorization for this asset"}
               </option>
               {matchingAuthorizations.map((authorization) => (
                 <option key={authorization.id} value={authorization.id}>
@@ -1685,14 +1782,44 @@ function AdminForm({
                 </option>
               ))}
             </select>
+            {level >= 4 ? (
+              <span className="muted">
+                Level 4 staff may publish without one. Any authorization selected here must be approved and belong to this asset.
+              </span>
+            ) : !matchingAuthorizations.length && (
+              <span className="muted" role="alert">
+                There is no approved authorization for this asset, so it cannot be listed yet. Close this form, open the asset under Collateral, and choose “Request sale authorization.” A Level 3 or 4 staff member must approve it first.
+              </span>
+            )}
           </label>
           <label>
             Public title
-            <input name="title" defaultValue={selected?.title || ""} required />
+            <input
+              name="title"
+              value={listingTitle}
+              onChange={(event) => {
+                const value = event.target.value;
+                setListingTitle(value);
+                if (!slugEdited) setSlug(slugify(value));
+              }}
+              required
+            />
           </label>
           <label>
-            Slug
-            <input name="slug" pattern="[a-z0-9-]+" required />
+            Public page address
+            <input
+              name="slug"
+              value={slug}
+              onChange={(event) => {
+                setSlug(slugify(event.target.value));
+                setSlugEdited(true);
+              }}
+              pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+              required
+            />
+            <span className="muted">
+              Auto-filled from the title. Public address: nyasamarket.com/listing/{slug || "your-item"}
+            </span>
           </label>
           <label>
             Sale mode
@@ -1901,9 +2028,27 @@ function AdminForm({
           </span>
         )}
       </label>
-      <button className="btn primary" disabled={busy}>
-        {busy ? "Submitting…" : "Save request"}
+      <button
+        className="btn primary"
+        disabled={busy || (type === "listing" && level < 4 && !matchingAuthorizations.length)}
+      >
+        {busy
+          ? "Submitting…"
+          : type === "listing"
+            ? level >= 4
+              ? "Publish listing"
+              : "Submit for approval"
+            : "Save request"}
       </button>
     </form>
   );
+}
+
+function slugify(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 }

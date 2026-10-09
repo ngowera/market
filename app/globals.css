@@ -1240,36 +1240,43 @@ footer a:not(.brand) {
   background: #f3f6f8;
 }
 .admin-sidebar {
-  width: 235px;
+  width: 290px;
+  min-width: 290px;
+  height: 100vh;
+  min-height: 100vh;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  overflow-y: auto;
   background: #102a3c;
   color: #fff;
   flex-shrink: 0;
 }
 .admin-sidebar .brand {
-  padding: 28px 22px;
-  font-size: 24px;
+  padding: 30px 24px;
+  font-size: 27px;
 }
 .admin-sidebar .brand small {
   font-size: 7px;
   letter-spacing: 1px;
 }
 .admin-sidebar .brand-mark {
-  width: 35px;
-  height: 35px;
+  width: 40px;
+  height: 40px;
   border-radius: 8px;
-  font-size: 25px;
+  font-size: 28px;
 }
 .sidebar-label {
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 1.6px;
   color: #7894a5;
   padding: 22px 24px 10px;
 }
 .admin-nav {
-  padding: 0 12px;
+  padding: 0 14px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 5px;
 }
 .admin-nav button {
   background: transparent;
@@ -1277,11 +1284,17 @@ footer a:not(.brand) {
   text-align: left;
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 12px;
   color: #aec2ce;
-  font-size: 12px;
-  padding: 11px 12px;
+  font-size: 15px;
+  line-height: 1.35;
+  padding: 14px 14px;
   border-radius: 6px;
+}
+.admin-nav button svg {
+  width: 19px;
+  height: 19px;
+  flex: 0 0 auto;
 }
 .admin-nav button.active {
   background: #1c4651;
@@ -1292,7 +1305,16 @@ footer a:not(.brand) {
   border-radius: 4px;
   background: #355e66;
   padding: 2px 5px;
-  font-size: 9px;
+  font-size: 11px;
+}
+.listing-workflow-note {
+  margin: 0;
+  padding: 12px 14px;
+  border-left: 3px solid #16866a;
+  background: #edf7f3;
+  color: #315b50;
+  font-size: 13px;
+  line-height: 1.55;
 }
 .admin-sidebar-bottom {
   padding: 28px 24px;
@@ -1428,57 +1450,40 @@ footer a:not(.brand) {
   color: #7e919b;
 }
 .recovery-chart {
-  height: 195px;
-  display: flex;
-  align-items: end;
-  gap: 16px;
-  border-bottom: 1px solid #dce7e8;
-  padding: 0 12px;
-  position: relative;
-  background: repeating-linear-gradient(
-    to top,
-    transparent 0,
-    transparent 47px,
-    #eaf0f2 48px,
-    #eaf0f2 49px
-  );
-}
-.chart-column {
-  flex: 1;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  flex-direction: column;
-  justify-content: end;
-  position: relative;
-}
-.chart-column > div {
-  width: 70%;
-  background: #c8ded7;
-  border-radius: 4px 4px 0 0;
-}
-.chart-column:last-child > div {
-  background: #138772;
-}
-.chart-column span {
-  font-size: 9px;
-  color: #8e9fa6;
-  position: absolute;
-  bottom: -21px;
+  width: 100%;
+  height: 230px;
+  overflow: visible;
 }
 .chart-legend {
   font-size: 10px;
-  margin-top: 34px;
+  margin-top: 14px;
   color: #7e919c;
   display: flex;
-  gap: 7px;
+  gap: 18px;
+  flex-wrap: wrap;
   align-items: center;
 }
+.chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
 .chart-legend i {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: #138772;
+  background: #17866f;
+}
+.chart-legend i.recovered {
+  background: #3273a0;
+}
+.chart-legend i.surplus {
+  background: #bd812e;
+}
+.chart-empty {
+  margin-top: 9px;
+  color: #83939b;
+  font-size: 10px;
 }
 .attention-list > div {
   display: flex;
@@ -1537,7 +1542,7 @@ footer a:not(.brand) {
   height: 39px;
   width: 49px;
   border-radius: 5px;
-  object-fit: contain;
+  object-fit: cover;
   background: #f1f5f5;
   mix-blend-mode: multiply;
 }
@@ -2078,6 +2083,11 @@ footer a:not(.brand) {
   }
   .admin-sidebar {
     width: 100%;
+    height: auto;
+    min-height: 0;
+    position: relative;
+    top: auto;
+    overflow: visible;
     padding-bottom: 10px;
   }
   .admin-sidebar .brand {

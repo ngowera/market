@@ -21,6 +21,10 @@ const listingGalleriesMigration=await fs.readFile('supabase/migrations/202610092
 await db.exec(listingGalleriesMigration);
 const level4ListingMigration=await fs.readFile('supabase/migrations/20261009250000_level4_direct_listing_publish.sql','utf8');
 await db.exec(level4ListingMigration);
+const dashboardMetricsMigration=await fs.readFile('supabase/migrations/20261009260000_real_dashboard_metrics.sql','utf8');
+await db.exec(dashboardMetricsMigration);
+const level4AuthorizationBypassMigration=await fs.readFile('supabase/migrations/20261009270000_level4_authorization_bypass.sql','utf8');
+await db.exec(level4AuthorizationBypassMigration);
 console.log('PASS: SQL installer executes and safely reruns on PostgreSQL');
 const maker='11111111-1111-4111-8111-111111111111',approver='22222222-2222-4222-8222-222222222222',buyer='33333333-3333-4333-8333-333333333333',other='44444444-4444-4444-8444-444444444444',noMfaStaff='55555555-5555-4555-8555-555555555555';
 await db.exec(`insert into auth.users(id,email,email_confirmed_at) values('${maker}','maker@test.invalid',now()),('${approver}','approver@test.invalid',now()),('${buyer}','buyer@test.invalid',now()),('${other}','other@test.invalid',now()),('${noMfaStaff}','no-mfa@test.invalid',now());
@@ -37,6 +41,7 @@ await as('authenticated',approver,'aal1');await rejects(`select public.approve_a
 await as('authenticated',noMfaStaff,'aal1');assert.equal((await db.query('select private.staff_level() as level')).rows[0].level,4);console.log('PASS: staff profile can explicitly waive MFA');
 await as('authenticated',approver);await db.query(`select public.approve_action('${auth.id}','approved','Review complete')`);
 await db.exec('reset role');const authorization=(await db.query('select id from public.sale_authorizations')).rows[0].id;await db.exec(`update public.staff_profiles set security_level=2 where user_id='${maker}'`);
+await rejects(`select public.create_listing('${JSON.stringify({asset_id:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',slug:'l2-no-authorization',method:'fixed_price',title:'Level 2 without authorization',description:'Must be rejected.',price:'1000',collection_point:'Blantyre',terms_version:'test-v1',image:'https://example.invalid/no-auth.webp',reason:'Missing authorization'})}') as d`,/Approved sale authorization required/);
 await as('authenticated',maker);const listing=(await db.query(`select public.create_listing('${JSON.stringify({asset_id:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',sale_authorization_id:authorization,slug:'test-console',method:'auction',title:'Test Console',description:'Public description',price:'100000',increment:'10000',duration_hours:'2',collection_point:'Blantyre',terms_version:'test-v1',image:'https://example.invalid/test.webp',defects:'Used',reason:'Publish approved asset'})}') as d`)).rows[0].d;
 await as('anon');assert.equal((await db.query('select * from public.public_catalog')).rows.length,0);console.log('PASS: pending listings hidden');
 await db.exec('reset role');const req=(await db.query(`select id from public.approval_requests where action_type='publish_listing'`)).rows[0].id;
@@ -64,7 +69,7 @@ const releaseRequest=(await db.query(`select public.request_change('release','${
 await as('authenticated',approver);await db.query(`select public.approve_action('${releaseRequest.id}','approved','Collector authorized')`);
 await as('authenticated',buyer);const note=(await db.query("select message from public.notifications where kind='collection_ready'")).rows[0].message;const releaseCode=note.split(': ')[1];
 await as('authenticated',maker);await db.query(`select public.release_asset('${order.id}','${releaseCode}','Buyer','ID-***-1','Handover signed')`);await rejects(`select public.release_asset('${order.id}','${releaseCode}','Buyer','ID-***-1','Duplicate handover')`,/must match/);console.log('PASS: approved identity-matched release is single use');
-await as('authenticated',approver);const metrics=(await db.query('select public.dashboard_metrics() as d')).rows[0].d;assert.equal(metrics.chart.length,6);assert.equal(metrics.kpis.recovered,120000);console.log('PASS: dashboard totals use approved financial ledger');
+await as('authenticated',approver);const metrics=(await db.query('select public.dashboard_metrics() as d')).rows[0].d;assert.equal(metrics.chart.length,6);assert.equal(metrics.kpis.recovered,120000);assert.equal(metrics.chart.at(-1).gross,120000);assert.equal(metrics.chart.at(-1).recovered,120000);const pendingApprovals=(await db.query("select count(*)::integer as count from public.approval_requests where status='pending'")).rows[0].count;const awaitingCollection=(await db.query("select count(*)::integer as count from public.orders where status='paid'")).rows[0].count;const pendingLoanPosts=(await db.query("select count(*)::integer as count from public.integration_outbox where status='pending'")).rows[0].count;assert.equal(metrics.attention.pending_approvals,pendingApprovals);assert.equal(metrics.attention.awaiting_collection,awaitingCollection);assert.equal(metrics.attention.loan_pending,pendingLoanPosts);console.log('PASS: dashboard metrics and attention counts use the approved ledger and live workflow tables');
 await as('authenticated',maker);await rejects(`select public.create_asset('{"external_loan_id":"LN-MISSING","asset_ref":"COL-MISSING","title":"Missing loan","category":"Other","valuation_amount":1000,"custody_location":"Blantyre","condition_notes":"Good","reason":"New item"}')`,/Loan not synchronized/);
 const standalone=(await db.query(`select public.create_asset('{"asset_ref":"COL-STANDALONE-1","title":"Standalone console","category":"Gaming","valuation_amount":200000,"custody_location":"Blantyre office","condition_notes":"Tested and in good condition","reason":"Standalone inventory"}') as d`)).rows[0].d;assert.equal(standalone.loan_bridge_id,null);assert.equal(standalone.currency,'MWK');
 const standaloneAuth=(await db.query(`select public.request_authorization('${standalone.id}','{"basis":"Institution-owned inventory","reference_no":"AUTH-STANDALONE-1","reason":"Ownership evidence reviewed","evidence_path":"evidence/standalone-1.pdf"}') as d`)).rows[0].d;
@@ -118,14 +123,23 @@ const level4AuthorizationId=(await db.query(`select id from public.sale_authoriz
 await as('authenticated',noMfaStaff,'aal1');
 const level4Listing=(await db.query(`select public.create_listing('${JSON.stringify({asset_id:level4Asset.id,sale_authorization_id:level4AuthorizationId,slug:'level4-direct-listing',method:'fixed_price',title:'Level 4 direct listing',description:'Published without a second listing approval.',price:'5000',collection_point:'Blantyre office',terms_version:'test-v1',images:['https://example.invalid/l4-front.webp','https://example.invalid/l4-side.webp'],reason:'Level 4 direct publication'})}') as d`)).rows[0].d;
 assert.equal(level4Listing.status,'live');assert.equal(level4Listing.approved_by,noMfaStaff);
+assert.equal(level4Listing.sale_authorization_id,level4AuthorizationId);
 await as('anon');const level4PublicListing=(await db.query(`select * from public.public_catalog where id='${level4Listing.id}'`)).rows[0];assert.equal(level4PublicListing.title,'Level 4 direct listing');assert.equal(level4PublicListing.images.length,2);
 await db.exec('reset role');assert.equal((await db.query(`select count(*)::integer as count from public.approval_requests where entity_id='${level4Listing.id}' and action_type='publish_listing'`)).rows[0].count,0);
 console.log('PASS: Level 4 listings publish immediately with no listing approval request');
+
+await as('authenticated',noMfaStaff,'aal1');
+const level4BypassAsset=(await db.query(`select public.create_asset('${JSON.stringify({title:'Level 4 no authorization asset',category:'Other',valuation_amount:'4000',currency:'MWK',custody_location:'Blantyre office',image_paths:['assets/level4-no-auth.webp'],reason:'Level 4 authorization bypass test'})}') as d`)).rows[0].d;
+const level4BypassListing=(await db.query(`select public.create_listing('${JSON.stringify({asset_id:level4BypassAsset.id,slug:'level4-no-authorization',method:'fixed_price',title:'Level 4 no authorization',description:'Published without sale authorization.',price:'4000',collection_point:'Blantyre office',terms_version:'test-v1',image:'https://example.invalid/l4-no-auth.webp',reason:'Level 4 direct publication without authorization'})}') as d`)).rows[0].d;
+assert.equal(level4BypassListing.status,'live');assert.equal(level4BypassListing.sale_authorization_id,null);
+await as('anon');assert.equal((await db.query(`select id from public.public_catalog where id='${level4BypassListing.id}'`)).rows.length,1);
+await db.exec('reset role');console.log('PASS: Level 4 can publish directly without a sale authorization');
 
 await db.query(`insert into public.approval_requests(action_type,entity_type,entity_id,requested_by,required_min_level,reason) values('publish_listing','listing','${level4Listing.id}','${noMfaStaff}',3,'Existing Level 4 pending listing')`);
 await db.query(`update public.listings set status='pending_approval',approved_by=null,publish_at=null where id='${level4Listing.id}'`);
 await db.exec(`select set_config('request.jwt.claim.sub','',false);select set_config('request.jwt.claims','{}',false);`);
 await db.exec(level4ListingMigration);
+await db.exec(level4AuthorizationBypassMigration);
 assert.equal((await db.query(`select status from public.listings where id='${level4Listing.id}'`)).rows[0].status,'live');
 assert.equal((await db.query(`select status from public.approval_requests where entity_id='${level4Listing.id}' and action_type='publish_listing'`)).rows[0].status,'cancelled');
 assert.equal((await db.query(`select id from public.public_catalog where id='${level4Listing.id}'`)).rows.length,1);
@@ -141,4 +155,17 @@ assert.equal(level3Listing.status,'pending_approval');
 await as('anon');assert.equal((await db.query(`select * from public.public_catalog where id='${level3Listing.id}'`)).rows.length,0);
 await db.exec('reset role');const level3Request=(await db.query(`select * from public.approval_requests where entity_id='${level3Listing.id}' and action_type='publish_listing'`)).rows[0];assert.equal(level3Request.requested_by,approver);assert.equal(level3Request.required_min_level,3);
 console.log('PASS: Level 3 listings remain hidden pending independent Level 3 approval');
+await as('authenticated',approver);
+const currentMetrics=(await db.query('select public.dashboard_metrics() as d')).rows[0].d;
+const currentMonthTotals=(await db.query(`select (select coalesce(sum(amount_due),0)::float8 from public.orders where date_trunc('month',created_at)=date_trunc('month',now()) and status in ('paid','released','closed','disputed')) as gross,(select coalesce(sum(sl.amount),0)::float8 from public.settlement_lines sl join public.settlements st on st.id=sl.settlement_id where date_trunc('month',st.created_at)=date_trunc('month',now()) and st.status in ('approved','posted_to_loan','closed') and sl.line_type='RECOVERY_TO_LOAN') as recovered,(select coalesce(sum(sl.amount),0)::float8 from public.settlement_lines sl join public.settlements st on st.id=sl.settlement_id where date_trunc('month',st.created_at)=date_trunc('month',now()) and st.status in ('approved','posted_to_loan','closed') and sl.line_type='OWNER_SURPLUS') as surplus`)).rows[0];
+assert.deepEqual(currentMetrics.chart.at(-1),{month:currentMetrics.chart.at(-1).month,gross:currentMonthTotals.gross,recovered:currentMonthTotals.recovered,surplus:currentMonthTotals.surplus});
+const attentionExpectations={
+	pending_approvals:(await db.query("select count(*)::integer as count from public.approval_requests where status='pending'")).rows[0].count,
+	awaiting_collection:(await db.query("select count(*)::integer as count from public.orders where status='paid'")).rows[0].count,
+	loan_pending:(await db.query("select count(*)::integer as count from public.integration_outbox where status='pending'")).rows[0].count,
+	loan_dead_letter:(await db.query("select count(*)::integer as count from public.integration_outbox where status='dead_letter'")).rows[0].count,
+	loan_posted:(await db.query("select count(*)::integer as count from public.integration_outbox where status='posted'")).rows[0].count,
+};
+assert.deepEqual(currentMetrics.attention,attentionExpectations);
+console.log('PASS: dashboard chart and attention panel report exact ledger/workflow data');
 await db.close();console.log('All database security and workflow tests passed.');
