@@ -147,7 +147,8 @@ async function get(request: Request, path: string) {
       "audit_events",
       "system_settings",
     ];
-    if (staff.security_level >= 2) names.push("collateral_assets", "offers");
+    if (staff.security_level >= 2)
+      names.push("collateral_assets", "sale_authorizations", "offers");
     if (staff.security_level === 4) names.push("staff_profiles");
     const rows = await Promise.all(
       names.map((n) => sb("/rest/v1/" + n + "?select=*&limit=200", {}, token)),
@@ -156,6 +157,7 @@ async function get(request: Request, path: string) {
     return json({
       listings: d.public_catalog,
       assets: d.collateral_assets || d.public_catalog,
+      authorizations: d.sale_authorizations || [],
       approvals: d.approval_requests,
       orders: d.orders,
       settlements: d.settlements,

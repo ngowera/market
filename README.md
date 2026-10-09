@@ -1,4 +1,4 @@
-# CMRP — Collateral Marketplace & Recovery Platform
+# nyasamarket.com
 
 Built from the 47-page `Collateral_Marketplace_Recovery_Platform_Full_Build_Spec.pdf`.
 

@@ -45,10 +45,13 @@ export async function getPublicListings(): Promise<{
     const listings = await sb(
       "/rest/v1/public_catalog?select=*&status=in.(live,reserved,sold)&order=created_at.desc",
     );
+    if (!Array.isArray(listings) || listings.length === 0) {
+      return { listings: samples, demo: true };
+    }
     return { listings, demo: false };
   } catch (error) {
     if ((error as {code?: string}).code === "PGRST205")
-      return { listings: [], demo: false };
+      return { listings: samples, demo: true };
     throw error;
   }
 }

@@ -21,6 +21,7 @@ import {
   CheckCircle2,
   LockKeyhole,
   PackageCheck,
+  X,
 } from "lucide-react";
 import {
   Select,
@@ -53,31 +54,74 @@ export function Brand() {
         <img src="/logo.svg" alt="" width="42" height="42" />
       </span>
       <span>
-        CMRP<small>COLLATERAL MARKETPLACE</small>
+        nyasamarket.com<small>SECURE ASSET MARKETPLACE</small>
       </span>
     </Link>
   );
 }
-export function Header() {
+export function Header({
+  query = "",
+  onSearchChange,
+  onSaleMethodChange,
+}: {
+  query?: string;
+  onSearchChange?: (value: string) => void;
+  onSaleMethodChange?: (method: "auction" | "fixed") => void;
+}) {
+  const [searchOpen, setSearchOpen] = useState(false);
   return (
-    <>
-      <div className="announcement">
-        <ShieldCheck size={14} /> Institution-led asset sales. Transparent by
-        design.<span>Malawi · MWK</span>
-      </div>
-      <header className="public-header">
+    <header className="public-header">
         <Brand />
+        {onSearchChange && (
+          <>
+            <button
+              className="mobile-search-toggle"
+              type="button"
+              aria-label={searchOpen ? "Close search" : "Search assets"}
+              aria-expanded={searchOpen}
+              onClick={() => setSearchOpen((open) => !open)}
+            >
+              {searchOpen ? <X size={19} /> : <Search size={19} />}
+            </button>
+            <form
+              className={
+                "mobile-header-search " + (searchOpen ? "open" : "")
+              }
+              role="search"
+              onSubmit={(event) => {
+                event.preventDefault();
+                document
+                  .getElementById("catalogue")
+                  ?.scrollIntoView({ behavior: "smooth" });
+              }}
+            >
+              <Search size={17} />
+              <input
+                aria-label="Search assets"
+                placeholder="Search assets"
+                value={query}
+                onChange={(event) => onSearchChange(event.target.value)}
+              />
+            </form>
+          </>
+        )}
         <nav>
           <Link href="/browse">Browse assets</Link>
-          <Link href="/browse?method=auction">Auctions</Link>
-          <Link href="/browse?method=fixed">Buy now</Link>
+          <Link
+            href="/browse?method=auction"
+            onClick={() => onSaleMethodChange?.("auction")}
+          >
+            Auctions
+          </Link>
+          <Link
+            href="/browse?method=fixed"
+            onClick={() => onSaleMethodChange?.("fixed")}
+          >
+            Buy now
+          </Link>
           <Link href="/help">How it works</Link>
         </nav>
-        <Link className="account-link" href="/account">
-          My account <ArrowUpRight size={16} />
-        </Link>
-      </header>
-    </>
+    </header>
   );
 }
 export function Footer() {
@@ -94,19 +138,15 @@ export function Footer() {
         <b>Marketplace</b>
         <Link href="/browse">Browse assets</Link>
         <Link href="/browse?method=auction">Live auctions</Link>
-        <Link href="/account">My account</Link>
+        <Link href="/help">How it works</Link>
       </div>
       <div>
         <b>Buyer support</b>
-        <Link href="/help">Bidding & collection</Link>
-        <Link href="/help?section=terms">Terms of sale</Link>
-        <Link href="/help?section=privacy">Privacy & complaints</Link>
+        <Link href="/help/bidding">Bidding & collection</Link>
+        <Link href="/help/terms">Terms of sale</Link>
+        <Link href="/help/privacy-and-complaints">Privacy & complaints</Link>
       </div>
       <div>
-        <b>For the institution</b>
-        <Link href="/admin">
-          Staff portal <ArrowUpRight size={13} />
-        </Link>
         <p>
           Malawi · Africa/Blantyre
           <br />
@@ -114,17 +154,35 @@ export function Footer() {
         </p>
       </div>
       <div className="footer-bottom">
-        © {new Date().getFullYear()} CMRP. Collateral Marketplace & Recovery
-        Platform.<span>Built around trust. Backed by traceability.</span>
+        © {new Date().getFullYear()} nyasamarket.com. All rights reserved.
+        <span>
+          No part of this website may be copied, reproduced, or distributed
+          without written permission.
+        </span>
       </div>
     </footer>
   );
 }
 export function DemoNotice() {
+  const [expanded, setExpanded] = useState(false);
   return (
-    <div className="demo-note">
-      <span className="status-dot" /> Preview catalogue · Sample assets and
-      reference photos. Purchases and bids require connected services.
+    <div className={"demo-note " + (expanded ? "expanded" : "")}>
+      <span className="status-dot" aria-hidden="true" />
+      <span className="demo-note-copy">
+        Items listed may include collateral offered through loan-recovery
+        processes and assets offered for disposal by their owners or authorized
+        sellers. All sales are subject to the applicable listing and sale terms.
+        Review each item's description, condition, price and collection
+        arrangements before bidding or buying.
+      </span>
+      <button
+        type="button"
+        className="demo-note-toggle"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((value) => !value)}
+      >
+        {expanded ? "Read less" : "Read more"}
+      </button>
     </div>
   );
 }
@@ -230,12 +288,12 @@ export function AssetCard({ item }: { item: Listing }) {
         <DialogContent>
           <DialogTitle>Save assets to your watchlist</DialogTitle>
           <DialogDescription>
-            Sign in to save assets. Sample listings cannot be added to a real
-            watchlist.
+            Account access is available through the secure private portal.
+            Public browsing remains open for discovery only.
           </DialogDescription>
-          <Link className="btn primary" href="/account">
-            Go to my account
-          </Link>
+          <button className="btn primary" onClick={() => setNotice(false)}>
+            Close
+          </button>
         </DialogContent>
       </Dialog>
     </article>
@@ -287,7 +345,11 @@ export default function Marketplace({
     );
   return (
     <>
-      <Header />
+      <Header
+        query={query}
+        onSearchChange={setQuery}
+        onSaleMethodChange={setMethod}
+      />
       <main>
         {!browse ? (
           <section className="hero">
@@ -457,6 +519,30 @@ export default function Marketplace({
             </div>
           </div>
           {browse && (
+            <div className="mobile-filter-row">
+              <Pick
+                value={location}
+                set={setLocation}
+                choices={["all", "Lilongwe", "Blantyre", "Mzuzu"]}
+                label="Location"
+              />
+              <Pick
+                value={condition}
+                set={setCondition}
+                choices={["all", "Good", "Fair", "Excellent"]}
+                label="Condition"
+              />
+              <input
+                aria-label="Maximum price in MWK"
+                type="number"
+                min="0"
+                placeholder="Max MWK"
+                value={max}
+                onChange={(e) => setMax(e.target.value)}
+              />
+            </div>
+          )}
+          {browse && (
             <div className="extra-filters">
               <label className="search-field">
                 <Search size={17} />
@@ -550,26 +636,13 @@ export default function Marketplace({
             </div>
           ))}
         </section>
-        <section className="staff-banner">
-          <ShieldCheck size={28} />
-          <div>
-            <b>Every asset has a story. Every sale has a record.</b>
-            <p>
-              Built for transparent sales and accountable institutional
-              recovery.
-            </p>
-          </div>
-          <Link href="/admin">
-            Staff portal <ChevronRight size={18} />
-          </Link>
-        </section>
       </main>
       <Footer />
     </>
   );
 }
 function locationSearch() {
-  return window.location.search;
+  return typeof window !== "undefined" ? window.location.search : "";
 }
 export function Pick({
   value,

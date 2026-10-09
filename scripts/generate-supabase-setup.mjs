@@ -1,6 +1,9 @@
 import fs from 'node:fs/promises';
 const migration='20261005182742_cmrp_foundation.sql';
+const upgrade='20261009120000_standalone_inventory.sql';
+const installerVersion=upgrade;
 const sql=await fs.readFile('supabase/migrations/'+migration,'utf8');
+const upgradeSql=await fs.readFile('supabase/migrations/'+upgrade,'utf8');
 const tables=[...sql.matchAll(/create table public\.(\w+)/g)].map(m=>m[1]);
 const types=[...sql.matchAll(/create type public\.(\w+)/g)].map(m=>m[1]);
 const output=`-- CMRP: paste this entire file into Supabase SQL Editor and Run as postgres.
@@ -13,7 +16,7 @@ declare conflict_name text;
 begin
   perform pg_advisory_xact_lock(20261005,182742);
   if to_regclass('public.cmrp_installation') is not null then
-    if exists(select 1 from public.cmrp_installation where version='${migration}') then
+    if exists(select 1 from public.cmrp_installation where version='${installerVersion}') then
       raise notice 'CMRP already installed; no changes made'; return;
     end if;
     raise exception 'Different CMRP version installed. Use migrations instead.';
@@ -29,11 +32,12 @@ begin
   end if;
   execute $cmrp_schema$
 ${sql}
+${upgradeSql}
 $cmrp_schema$;
   create table public.cmrp_installation(version text primary key,installed_at timestamptz not null default now());
   alter table public.cmrp_installation enable row level security;
   revoke all on public.cmrp_installation from public,anon,authenticated;
-  insert into public.cmrp_installation(version) values('${migration}');
+  insert into public.cmrp_installation(version) values('${installerVersion}');
 end
 $cmrp_installer$;
 notify pgrst, 'reload schema';

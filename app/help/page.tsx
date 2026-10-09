@@ -5,12 +5,10 @@ export default function Help() {
       <Header />
       <main className="help-layout">
         <nav className="help-nav">
-          <a href="#bidding">Bidding & buying</a>
-          <a href="#payment">Payment</a>
-          <a href="#collection">Collection</a>
-          <a href="#terms">Sale terms</a>
-          <a href="#privacy">Privacy</a>
-          <a href="#complaints">Help & complaints</a>
+          <a href="/help/bidding">Bidding & collection</a>
+          <a href="/help/terms">Terms of sale</a>
+          <a href="/help/privacy-and-complaints">Privacy & complaints</a>
+          <a href="/help">General help</a>
         </nav>
         <article className="help-copy">
           <div className="eyebrow">BUY WITH CONFIDENCE</div>
@@ -18,82 +16,74 @@ export default function Help() {
           <section id="bidding">
             <h2>Bidding & buying</h2>
             <p>
-              Browse the condition report and specifications before choosing an
-              asset. Create an account and verify your contact details to bid. A
-              bid must meet the server’s minimum next bid. All auction close
-              times display in Central Africa Time (CAT, UTC+2). Qualifying late
-              bids may extend an auction to give other buyers a fair
-              opportunity. The server confirms the winner; the countdown is
-              informational.
+              Buyers can browse available listings, review item details and
+              decide whether to bid or buy now. Each listing includes a clear
+              description, condition notes and collection information so you know
+              what you are buying before you commit.
             </p>
             <p>
-              For fixed-price listings, Buy now reserves the asset for a limited
-              checkout window. For offer-enabled listings, submit your amount
-              and wait for the institution’s acceptance or counteroffer. An
-              accepted offer does not confirm payment.
+              Auctions are subject to the stated minimum bid and closing rules.
+              Fixed-price listings may be purchased immediately if available,
+              while some listings may accept a buyer offer. The final sale is
+              confirmed only after the platform accepts the transaction.
             </p>
           </section>
           <section id="payment">
             <h2>Payment</h2>
             <p>
-              Checkout uses PayChangu’s hosted payment page. Never pay staff
-              through an unofficial personal wallet. The platform verifies the
-              transaction reference, amount and currency on the server. A
-              successful return screen alone does not confirm that your order is
-              paid. Your account shows the verified status.
+              Payment is made through the secure checkout process provided by the
+              platform. Do not pay by personal transfer or outside the official
+              system. Once payment is confirmed, the order status updates and the
+              item is held for collection according to the sale rules.
             </p>
           </section>
           <section id="collection">
             <h2>Collection</h2>
             <p>
               Collection is available only after verified payment and staff
-              release approval. Follow the collection location and deadline
-              shown on your order. Bring identification matching your account or
-              arrange an authorized collector with staff. Collection codes are
-              single-use. Arrange suitable transport for vehicles and larger
-              appliances.
+              release approval. All collection takes place at our office in
+              Blantyre. Follow the collection deadline shown on your order and
+              bring identification matching your account or arrange an authorized
+              collector with staff. Collection codes are single-use. Arrange
+              suitable transport for vehicles and larger appliances.
             </p>
           </section>
           <section id="terms">
             <h2>Terms of sale</h2>
-            <div className="legal-draft">
-              Draft for institutional review. Final seller identity, approved
-              auction terms, fees, tax treatment and complaint contacts must be
-              configured before public launch.
-            </div>
             <p>
-              Assets are used collateral sold by the institution. Review known
-              defects and inspect an asset where viewing is available.
-              Descriptions must be accurate, and any applicable buyer fees must
-              be disclosed before commitment. Rights, warranties, refunds, bid
-              withdrawal and dispute handling are governed by the institution’s
-              legally reviewed terms. Sample listings cannot be purchased.
+              All listings are sold according to the item description, condition
+              notes, payment rules and collection instructions shown on the
+              website. Buyers should review the details carefully before placing a
+              bid or making a purchase.
+            </p>
+            <p>
+              The institution may cancel or withhold a sale where the asset is not
+              available, the required approvals are not complete, or the listing
+              rules are not met. Final sale confirmation is given only after the
+              platform approves the transaction.
             </p>
           </section>
           <section id="privacy">
             <h2>Privacy</h2>
             <p>
-              Buyer contact details support account access, transaction
-              notifications, payment reconciliation and collection. Staff access
-              is restricted by role. Public bid histories use aliases. Borrower
-              identities, loan information and private evidence do not appear in
-              public listings. Payment card details are handled by the hosted
-              payment provider.
+              We use buyer information to create and manage accounts, confirm
+              identity, process payments, send important updates and support
+              collection. Personal information is kept private and only shared
+              where required to complete the sale or provide support.
             </p>
             <p>
-              The institution must publish its controller identity, lawful
-              purposes, retention periods, processor details and rights-request
-              contact before collecting production data.
+              Public listings do not contain sensitive borrower or private
+              evidence information. Payment details are handled by the approved
+              secure payment provider.
             </p>
           </section>
           <section id="complaints">
             <h2>Help & complaints</h2>
             <p>
-              For an asset concern, include its listing reference. For payment
-              or collection concerns, include your order number. Never send card
-              details, passwords or one-time sign-in codes. The institution’s
-              verified support email, phone and escalation process will be
-              displayed here once configured.
+              If you have a concern about a listing, payment, order, or
+              collection, contact the support team with the relevant listing or
+              order number and a short description of the issue. Please do not
+              send passwords, card details, or private security codes by email.
             </p>
           </section>
         </article>

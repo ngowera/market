@@ -10,7 +10,7 @@ export async function generateMetadata({
   const d = await getPublicListings();
   const i = d.listings.find((x) => x.slug === slug);
   return {
-    title: i ? i.title + " | CMRP" : "Asset not found | CMRP",
+    title: i ? i.title + " | nyasamarket.com" : "Asset not found | nyasamarket.com",
     description: i?.description,
   };
 }

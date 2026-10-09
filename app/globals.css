@@ -140,20 +140,6 @@ label > textarea {
 small {
   font-size: 11px;
 }
-.announcement {
-  height: 33px;
-  background: #0f293b;
-  color: #d3e1e6;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 5%;
-  font-size: 11px;
-}
-.announcement > span {
-  margin-left: auto;
-  color: #a9c1cd;
-}
 .public-header {
   height: 88px;
   padding: 0 5%;
@@ -204,6 +190,10 @@ small {
 }
 .public-header nav a:hover {
   color: #087c68;
+}
+.mobile-search-toggle,
+.mobile-header-search {
+  display: none;
 }
 .account-link {
   display: flex;
@@ -504,6 +494,9 @@ small {
   display: flex;
   gap: 10px;
 }
+.mobile-filter-row {
+  display: none;
+}
 .filter-tools [data-slot="select-trigger"] {
   font-size: 11px;
   height: 32px;
@@ -524,13 +517,40 @@ small {
 .demo-note {
   font-size: 10px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 7px;
   color: #6b7f79;
   margin-bottom: 14px;
   padding: 9px 11px;
   background: #f2f7f5;
   border-radius: 5px;
+}
+.demo-note .status-dot {
+  margin-top: 4px;
+}
+.demo-note-copy {
+  display: -webkit-box;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.demo-note.expanded .demo-note-copy {
+  display: block;
+  overflow: visible;
+}
+.demo-note-toggle {
+  align-self: flex-end;
+  flex: 0 0 auto;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #087c68;
+  font-size: inherit;
+  font-weight: 700;
+  white-space: nowrap;
 }
 .asset-grid {
   display: grid;
@@ -1083,6 +1103,9 @@ footer a:not(.brand) {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  position: sticky;
+  top: 24px;
+  align-self: start;
 }
 .help-nav a {
   padding: 12px;
@@ -1090,6 +1113,9 @@ footer a:not(.brand) {
   background: #f1f6f4;
   color: #3c6c65;
   font-size: 12px;
+}
+.help-copy {
+  min-height: 1100px;
 }
 .help-copy h1 {
   font-size: 32px;
@@ -1611,14 +1637,59 @@ footer a:not(.brand) {
   }
 }
 @media (max-width: 760px) {
+  .hero,
+  .browse-heading,
+  .trust-strip {
+    display: none;
+  }
+
   .public-header {
+    position: relative;
+    z-index: 5;
     height: auto;
     padding: 19px 5%;
     flex-wrap: wrap;
     gap: 15px;
   }
+  .mobile-search-toggle {
+    order: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    margin-left: auto;
+    border: 1px solid #dce5e6;
+    border-radius: 7px;
+    background: #fff;
+    color: #087c68;
+  }
+  .mobile-header-search {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% - 52px);
+    right: 5%;
+    display: none;
+    width: min(360px, 90vw);
+    align-items: center;
+    gap: 9px;
+    padding: 0 12px;
+    border: 1px solid #dce5e6;
+    border-radius: 7px;
+    background: #fff;
+    color: #087c68;
+    box-shadow: 0 8px 24px #142b3b1c;
+  }
+  .mobile-header-search.open {
+    display: flex;
+  }
+  .mobile-header-search input {
+    border: 0 !important;
+    padding: 11px 0 !important;
+    outline: 0;
+  }
   .public-header nav {
-    order: 3;
+    order: 4;
     width: 100%;
     justify-content: space-between;
     gap: 8px;
@@ -1663,12 +1734,11 @@ footer a:not(.brand) {
     right: 20px;
     top: 44px;
   }
-  .trust-strip {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
-    padding: 22px 0;
-    font-size: 9px;
+  .extra-filters .search-field {
+    display: none;
+  }
+  .section-top {
+    display: none;
   }
   .section-top h2 {
     font-size: 22px;
@@ -1678,22 +1748,55 @@ footer a:not(.brand) {
     white-space: nowrap;
   }
   .catalogue {
-    padding-top: 28px;
+    padding-top: 20px;
   }
   .categories {
+    flex: 1;
+    min-width: 0;
     margin: 20px 0;
+    padding-bottom: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .categories::-webkit-scrollbar {
+    display: none;
   }
   .categories button {
     padding: 11px 13px;
     font-size: 10px;
+    flex: 0 0 auto;
   }
   .catalogue-toolbar {
     flex-wrap: wrap;
   }
   .filter-tools {
+    display: none;
+  }
+  .mobile-filter-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin: 14px 0 0;
+  }
+  .mobile-filter-row [data-slot="select-trigger"] {
     width: 100%;
-    justify-content: space-between;
-    margin-top: 9px;
+    min-width: 0;
+    height: 36px;
+    padding: 0 7px;
+    font-size: 9px;
+  }
+  .mobile-filter-row input {
+    height: 36px;
+    padding: 8px !important;
+    font-size: 10px;
+  }
+  .extra-filters {
+    display: none;
   }
   .segmented {
     gap: 24px;

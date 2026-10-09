@@ -189,11 +189,11 @@ export default function ListingDetail({
                 </TabsContent>
                 <TabsContent value="collection">
                   <p style={{ marginTop: 20 }}>
-                    Collection takes place in {item.location}. Instructions and
-                    the collection deadline appear on your paid order. Bring
-                    your identity reference or an approved collector. The
-                    institution must verify payment and authorize release before
-                    handover.
+                    Collection takes place at our office in Blantyre.
+                    Instructions and the collection deadline appear on your
+                    paid order. Bring your identity reference or an approved
+                    collector. The institution must verify payment and authorize
+                    release before handover.
                   </p>
                 </TabsContent>
               </Tabs>

@@ -6,6 +6,8 @@
 
 The installer is transactional and safe to rerun. It refuses conflicting existing tables/types/private schema rather than overwriting another application's data. If you already installed the original foundation migration, use migrations instead of this installer. No fake loan or sale records are seeded. Listings appear only after staff publish them through the approval process.
 
+Collateral can be linked to a synchronized loan or created as a standalone sale by leaving the external loan ID blank. Both kinds still require an approved sale authorization and independent listing approval. Standalone sale proceeds are recorded as owner surplus after approved fees; no loan recovery is generated.
+
 ## First staff accounts
 
 Create two real users through Supabase Authentication or the website signup screen. Confirm their email addresses. Then edit and run the following SQL with their actual emails. Use separate people for maker/checker approvals.

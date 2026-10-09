@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "CMRP | Collateral Marketplace",
-  description: "Discover institution-approved assets across Malawi. Auctions, fixed-price sales and secure collection.",
+  title: "nyasamarket.com | Secure asset marketplace",
+  description: "Discover transparent, institution-led asset sales and recovery opportunities on nyasamarket.com.",
   other: {
     "codex-preview": "development",
   },

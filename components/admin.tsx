@@ -316,7 +316,7 @@ export default function Admin({ connected }: { connected: boolean }) {
               Go to marketplace
             </Link>
             <p style={{ fontSize: 9, marginTop: 25, lineHeight: 1.8 }}>
-              CMRP · Malawi
+              nyasamarket.com · Malawi
               <br />
               Secure recovery operations
             </p>
@@ -1096,6 +1096,8 @@ export default function Admin({ connected }: { connected: boolean }) {
             <AdminForm
               type={modal}
               selected={selected}
+              assets={assets}
+              authorizations={records.authorizations || []}
               busy={busy}
               onSubmit={(body) => write(modal, body)}
             />
@@ -1447,14 +1449,25 @@ function NativePick({ name, values }: { name: string; values: string[] }) {
 function AdminForm({
   type,
   selected,
+  assets = [],
+  authorizations = [],
   busy,
   onSubmit,
 }: {
   type: string;
   selected: any;
+  assets?: any[];
+  authorizations?: any[];
   busy: boolean;
   onSubmit: (d: any) => void;
 }) {
+  const [assetId, setAssetId] = useState(
+    assets.some((asset) => asset.id === selected?.id) ? selected.id : "",
+  );
+  const matchingAuthorizations = authorizations.filter(
+    (authorization) =>
+      authorization.asset_id === assetId && authorization.status === "approved",
+  );
   return (
     <form
       className="form-grid"
@@ -1469,8 +1482,11 @@ function AdminForm({
       {type === "asset" ? (
         <>
           <label>
-            External loan ID
-            <input name="external_loan_id" required />
+            External loan ID (optional)
+            <input
+              name="external_loan_id"
+              placeholder="Leave blank for a standalone sale"
+            />
           </label>
           <label>
             Asset reference
@@ -1519,12 +1535,42 @@ function AdminForm({
       ) : type === "listing" ? (
         <>
           <label>
-            Asset UUID
-            <input name="asset_id" defaultValue={selected?.id || ""} required />
+            Asset
+            <select
+              name="asset_id"
+              value={assetId}
+              onChange={(event) => setAssetId(event.target.value)}
+              required
+            >
+              <option value="" disabled>
+                Select collateral asset
+              </option>
+              {assets.map((asset) => (
+                <option key={asset.id} value={asset.id}>
+                  {asset.title} · {asset.asset_ref || asset.id}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
-            Approved sale authorization UUID
-            <input name="sale_authorization_id" required />
+            Approved sale authorization
+            <select
+              key={assetId}
+              name="sale_authorization_id"
+              defaultValue={matchingAuthorizations[0]?.id || ""}
+              required
+            >
+              <option value="" disabled>
+                {matchingAuthorizations.length
+                  ? "Select approved authorization"
+                  : "No approved authorization for this asset"}
+              </option>
+              {matchingAuthorizations.map((authorization) => (
+                <option key={authorization.id} value={authorization.id}>
+                  {authorization.reference_no || authorization.id}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
             Public title

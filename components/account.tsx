@@ -183,7 +183,7 @@ export default function Account({
             <p>
               {staff
                 ? "Use your institution-assigned staff account."
-                : "Sign in to your CMRP buyer account."}
+                : "Sign in to your nyasamarket.com buyer account."}
             </p>
             {!staff && (
               <div className="segmented">
