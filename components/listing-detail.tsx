@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {subscribeListing} from "@/lib/realtime";
 import Link from "next/link";
 import {
@@ -52,6 +52,9 @@ export default function ListingDetail({
   const displayedImage = galleryImages.includes(activeImage)
     ? activeImage
     : galleryImages[0];
+  const activeImageIndex = Math.max(0, galleryImages.indexOf(displayedImage));
+  const touchStartX = useRef<number | null>(null);
+  const didSwipe = useRef(false);
   useEffect(() => {
     if (demo) return;
     const update = async () => {
@@ -121,16 +124,9 @@ export default function ListingDetail({
         {demo && <DemoNotice />}
         <div className="detail-grid">
           <div>
-            <button
-              className="detail-photo"
-              aria-label="Zoom asset image"
-              onClick={() => setAction("zoom")}
-              style={{ width: "100%", border: 0 }}
-            >
-              <img src={displayedImage} alt={item.title} />
-            </button>
-            {galleryImages.length > 1 && (
-              <div className="detail-gallery" aria-label="Listing images">
+            <div className="detail-media">
+              {galleryImages.length > 1 && (
+                <div className="detail-gallery" aria-label="Listing images">
                 {galleryImages.map((image, index) => (
                   <button
                     key={`${image}-${index}`}
@@ -143,8 +139,45 @@ export default function ListingDetail({
                     <img src={image} alt="" />
                   </button>
                 ))}
+                </div>
+              )}
+              <div className="detail-photo-stage">
+                <button
+                  type="button"
+                  className="detail-photo"
+                  aria-label="Zoom asset image"
+                  onTouchStart={(event) => {
+                    touchStartX.current = event.changedTouches[0]?.clientX ?? null;
+                    didSwipe.current = false;
+                  }}
+                  onTouchEnd={(event) => {
+                    const start = touchStartX.current;
+                    touchStartX.current = null;
+                    if (start === null || galleryImages.length < 2) return;
+                    const delta = event.changedTouches[0].clientX - start;
+                    if (Math.abs(delta) < 44) return;
+                    didSwipe.current = true;
+                    const direction = delta < 0 ? 1 : -1;
+                    const nextIndex = (activeImageIndex + direction + galleryImages.length) % galleryImages.length;
+                    setActiveImage(galleryImages[nextIndex]);
+                  }}
+                  onClick={() => {
+                    if (didSwipe.current) {
+                      didSwipe.current = false;
+                      return;
+                    }
+                    setAction("zoom");
+                  }}
+                >
+                  <img src={displayedImage} alt={item.title} />
+                </button>
+                {galleryImages.length > 1 && (
+                  <span className="detail-image-count" aria-live="polite">
+                    {activeImageIndex + 1} / {galleryImages.length}
+                  </span>
+                )}
               </div>
-            )}
+            </div>
             <p className="muted" style={{ fontSize: 10, marginTop: 10 }}>
               {demo
                 ? "Reference photo, not the actual collateral asset."

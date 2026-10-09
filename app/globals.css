@@ -955,7 +955,20 @@ footer a:not(.brand) {
   grid-template-columns: 1.2fr 1fr;
   gap: 40px;
 }
+.detail-media {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+.detail-photo-stage {
+  grid-column: 2;
+  grid-row: 1;
+  position: relative;
+  min-width: 0;
+}
 .detail-photo {
+  width: 100%;
   height: 430px;
   background: #f1f5f3;
   border-radius: 10px;
@@ -963,6 +976,7 @@ footer a:not(.brand) {
   display: flex;
   align-items: center;
   justify-content: center;
+  touch-action: pan-y;
 }
 .detail-photo img {
   max-width: 100%;
@@ -971,10 +985,16 @@ footer a:not(.brand) {
   mix-blend-mode: multiply;
 }
 .detail-gallery {
+  grid-column: 1;
+  grid-row: 1;
   display: flex;
+  flex-direction: column;
   gap: 10px;
-  overflow-x: auto;
-  padding: 12px 2px 4px;
+  max-height: 430px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1px 4px 1px 1px;
+  scrollbar-width: thin;
 }
 .detail-gallery button {
   flex: 0 0 76px;
@@ -994,6 +1014,9 @@ footer a:not(.brand) {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+.detail-image-count {
+  display: none;
 }
 .detail-info h1 {
   font-size: 32px;
@@ -1962,8 +1985,47 @@ footer a:not(.brand) {
   .detail-grid {
     grid-template-columns: 1fr;
   }
+  .detail-media {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .detail-photo-stage {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .detail-gallery {
+    grid-column: 1;
+    grid-row: 2;
+    flex-direction: row;
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    padding: 0 0 6px;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+  }
+  .detail-gallery button {
+    flex-basis: 68px;
+    width: 68px;
+    height: 58px;
+    scroll-snap-align: start;
+  }
   .detail-photo {
     height: 300px;
+  }
+  .detail-image-count {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    display: block;
+    padding: 5px 9px;
+    border-radius: 999px;
+    background: rgb(24 36 41 / 78%);
+    color: #fff;
+    font-size: 11px;
+    line-height: 1;
+    pointer-events: none;
   }
   .detail-info h1 {
     font-size: 28px;
