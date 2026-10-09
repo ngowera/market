@@ -1,4 +1,4 @@
-import { samples, type Listing } from "./catalog";
+import type { Listing } from "./catalog";
 export function config() {
   return {
     url: process.env.SUPABASE_URL,
@@ -40,20 +40,12 @@ export async function getPublicListings(): Promise<{
   listings: Listing[];
   demo: boolean;
 }> {
-  if (!config().url || !config().key) return { listings: samples, demo: true };
-  try {
-    const listings = await sb(
-      "/rest/v1/public_catalog?select=*&status=in.(live,reserved,sold)&order=created_at.desc",
-    );
-    if (!Array.isArray(listings) || listings.length === 0) {
-      return { listings: samples, demo: true };
-    }
-    return { listings, demo: false };
-  } catch (error) {
-    if ((error as {code?: string}).code === "PGRST205")
-      return { listings: samples, demo: true };
-    throw error;
-  }
+  if (!config().url || !config().key) return { listings: [], demo: true };
+  const listings = await sb(
+    "/rest/v1/public_catalog?select=*&status=in.(live,reserved,sold)&order=created_at.desc",
+  );
+  if (!Array.isArray(listings)) throw new Error("Public catalogue response is invalid.");
+  return { listings, demo: false };
 }
 export async function currentUser(request: Request) {
   const cookie = request.headers.get("cookie") || "";

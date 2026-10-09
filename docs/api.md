@@ -17,6 +17,7 @@ All responses use JSON except hosted provider redirects. Mutations require same-
 | `POST /api/payments/webhook` | PayChangu raw body authenticated by SHA-256 HMAC Signature |
 | `GET /api/admin/data` | Active staff level/MFA; RLS-scoped data |
 | `POST /api/admin/asset`, `/listing`, `/authorization` | Level 2 preparation requests; collateral may omit `external_loan_id` for a standalone sale |
+| `POST /api/admin/listing-image` | Active Level 2 staff session; multipart `file` (JPEG, PNG or WebP, maximum 5 MB), uploads to the public `listing-images` Storage bucket and returns its URL |
 | `POST /api/admin/approve` | `{request_id, decision, reason}`; independent eligible checker |
 | `POST /api/admin/offer` | `{offer_id, decision, amount?, reason}`; Level 3 |
 | `POST /api/admin/prepare-release` | `{order_id, collector_name, collector_ref, reason}`; paid-only approval request |

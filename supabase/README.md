@@ -4,7 +4,9 @@
 2. Paste **all of `setup.sql`** and click Run (postgres role).
 3. Visit the marketplace. Browsing, searching and viewing published listings require no account. Accounts are required for bids, offers, purchases and staff administration.
 
-The installer is transactional and safe to rerun. It refuses conflicting existing tables/types/private schema rather than overwriting another application's data. If you already installed the original foundation migration, use migrations instead of this installer. No fake loan or sale records are seeded. Listings appear only after staff publish them through the approval process.
+The installer is transactional and safe to rerun. It refuses conflicting existing tables/types/private schema rather than overwriting another application's data. If you already installed the original foundation migration, use migrations instead of this installer. No fake loan or sale records are seeded. An empty live catalogue stays empty; listings appear only after staff publish them through the approval process.
+
+For a new Supabase project, run [`setup.sql`](setup.sql) in **Supabase Dashboard → SQL Editor** as the database owner. For the already-connected project, do not rerun the full installer: run [`20261009163000_listing_photo_storage.sql`](migrations/20261009163000_listing_photo_storage.sql) there to configure the listing image bucket and staff upload policy. GitHub Pages is a static read-only preview; use the server-backed `/admin` deployment for authenticated item and photo uploads.
 
 Collateral can be linked to a synchronized loan or created as a standalone sale by leaving the external loan ID blank. Both kinds still require an approved sale authorization and independent listing approval. Standalone sale proceeds are recorded as owner surplus after approved fees; no loan recovery is generated.
 

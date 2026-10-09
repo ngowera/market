@@ -351,7 +351,7 @@ export default function Marketplace({
         onSaleMethodChange={setMethod}
       />
       <main>
-        {!browse ? (
+        {!browse && initial.length > 0 ? (
           <section className="hero">
             <div className="hero-content">
               <div className="hero-kicker">
@@ -401,37 +401,39 @@ export default function Marketplace({
             <div className="hero-visual">
               <div className="visual-orbit" />
               <div className="featured-label">
-                THE FEATURED LOT <span>01 / 04</span>
+                FEATURED LISTING
               </div>
               <img
-                src="/assets/hilux.webp"
-                alt="White Toyota Hilux, illustrative sample asset"
+                src={initial[0].image}
+                alt={initial[0].title}
               />
               <div className="hero-asset-caption">
                 <div>
-                  <span>VEHICLES · LILONGWE</span>
-                  <h2>Toyota Hilux Double Cab</h2>
+                  <span>
+                    {initial[0].category.toUpperCase()} · {initial[0].location.toUpperCase()}
+                  </span>
+                  <h2>{initial[0].title}</h2>
                 </div>
                 <Link
-                  href="/listing/toyota-hilux-double-cab"
-                  aria-label="Explore featured Hilux"
+                  href={"/listing/" + initial[0].slug}
+                  aria-label={"View " + initial[0].title}
                 >
                   <ArrowUpRight />
                 </Link>
               </div>
               <div className="float-label">
                 <span className="status-dot" />
-                Sample auction <b>{money(18500000)}</b>
+                {methodName(initial[0].method)} <b>{money(initial[0].price)}</b>
               </div>
             </div>
           </section>
-        ) : (
+        ) : browse ? (
           <section className="browse-heading">
             <div className="eyebrow">THE MARKETPLACE</div>
             <h1>Find something worth owning.</h1>
             <p>Explore assets by category, location and sale method.</p>
           </section>
-        )}
+        ) : null}
         <div className="trust-strip">
           <span>
             <ShieldCheck />
@@ -582,21 +584,27 @@ export default function Marketplace({
           {!filtered.length && (
             <div className="empty-state">
               <Search size={30} />
-              <h3>No matching assets</h3>
-              <p>Try another category or a broader search.</p>
-              <button
-                className="btn secondary"
-                onClick={() => {
-                  setQuery("");
-                  setCategory("All assets");
-                  setMethod("all");
-                  setLocation("all");
-                  setMax("");
-                  setCondition("all");
-                }}
-              >
-                Clear filters
-              </button>
+              <h3>{initial.length ? "No matching assets" : "No assets listed yet"}</h3>
+              <p>
+                {initial.length
+                  ? "Try another category or a broader search."
+                  : "Approved listings will appear here when they are available."}
+              </p>
+              {!!initial.length && (
+                <button
+                  className="btn secondary"
+                  onClick={() => {
+                    setQuery("");
+                    setCategory("All assets");
+                    setMethod("all");
+                    setLocation("all");
+                    setMax("");
+                    setCondition("all");
+                  }}
+                >
+                  Clear filters
+                </button>
+              )}
             </div>
           )}
         </section>

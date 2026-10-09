@@ -258,6 +258,40 @@ async function post(request: Request, path: string) {
     );
     return json({ received: true, status: result.status });
   }
+  if (path === "admin/listing-image") {
+    const maxImageSize = 5 * 1024 * 1024;
+    if (Number(request.headers.get("content-length") || 0) > maxImageSize + 16384)
+      return json({ error: "Image must be 5 MB or smaller." }, 413);
+    const { token } = await staffUser(request, 2);
+    const form = await request.formData();
+    const file = form.get("file");
+    const extensions: Record<string, string> = {
+      "image/jpeg": "jpg",
+      "image/png": "png",
+      "image/webp": "webp",
+    };
+    if (!(file instanceof File) || !extensions[file.type])
+      return json({ error: "Choose a JPEG, PNG, or WebP image." }, 400);
+    if (file.size > maxImageSize)
+      return json({ error: "Image must be 5 MB or smaller." }, 413);
+    const c = config();
+    const objectPath = `listings/${crypto.randomUUID()}.${extensions[file.type]}`;
+    await sb(
+      "/storage/v1/object/listing-images/" + objectPath,
+      {
+        method: "POST",
+        body: await file.arrayBuffer(),
+        headers: { "Content-Type": file.type, "x-upsert": "false" },
+      },
+      token,
+    );
+    return json({
+      image:
+        c.url!.replace(/\/$/, "") +
+        "/storage/v1/object/public/listing-images/" +
+        objectPath,
+    });
+  }
   if (Number(request.headers.get("content-length") || 0) > 65536)
     return json({ error: "Payload too large" }, 413);
   const b: any = await request.json().catch(() => ({}));

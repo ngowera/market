@@ -8,7 +8,7 @@ declare conflict_name text;
 begin
   perform pg_advisory_xact_lock(20261005,182742);
   if to_regclass('public.cmrp_installation') is not null then
-    if exists(select 1 from public.cmrp_installation where version='20261009120000_standalone_inventory.sql') then
+    if exists(select 1 from public.cmrp_installation where version='20261009163000_listing_photo_storage.sql') then
       raise notice 'CMRP already installed; no changes made'; return;
     end if;
     raise exception 'Different CMRP version installed. Use migrations instead.';
@@ -668,11 +668,47 @@ begin
   return jsonb_build_object('status','paid','id',p.id,'settlement_id',s.id);
 end
 $$;
+insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
+values(
+  'listing-images',
+  'listing-images',
+  true,
+  5242880,
+  array['image/jpeg','image/png','image/webp']
+)
+on conflict(id) do update set
+  name=excluded.name,
+  public=true,
+  file_size_limit=excluded.file_size_limit,
+  allowed_mime_types=excluded.allowed_mime_types;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname='storage'
+      and tablename='objects'
+      and policyname='public_listing_photos'
+  ) then
+    execute 'create policy public_listing_photos on storage.objects for select to anon,authenticated using(bucket_id=''listing-images'')';
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname='storage'
+      and tablename='objects'
+      and policyname='staff_listing_image_upload'
+  ) then
+    execute 'create policy staff_listing_image_upload on storage.objects for insert to authenticated with check(bucket_id=''listing-images'' and private.staff_level()>=2)';
+  end if;
+end
+$$;
+
 $cmrp_schema$;
   create table public.cmrp_installation(version text primary key,installed_at timestamptz not null default now());
   alter table public.cmrp_installation enable row level security;
   revoke all on public.cmrp_installation from public,anon,authenticated;
-  insert into public.cmrp_installation(version) values('20261009120000_standalone_inventory.sql');
+  insert into public.cmrp_installation(version) values('20261009163000_listing_photo_storage.sql');
 end
 $cmrp_installer$;
 notify pgrst, 'reload schema';

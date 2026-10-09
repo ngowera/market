@@ -37,7 +37,7 @@
 - Full password-recovery callback, self-service TOTP enrollment and logout-all-devices UX need staging integration with your Auth settings.
 - Staff invitations/onboarding, multi-angle media manager with image processing and evidence upload UX need institutional configuration. Existing user UUIDs can receive approved staff access.
 - Scheduled publishing, approved cancellations/price reductions and exceptional auction controls need policy-specific workflows. No shortcut lets staff bypass the approval rules.
-- Management KPIs and historical chart queries need your agreed reporting definitions and complete data; preview figures are samples, connected tables show actual authorized records.
+- Management KPIs and historical chart queries need your agreed reporting definitions and complete data; connected tables show actual authorized records.
 - Production job scheduler, monitoring/alerts, backup/Storage retention, restore rehearsal, incident response, deployment pipeline and performance/load testing.
 - DNS and TLS for the institution's chosen www/admin domains.
 

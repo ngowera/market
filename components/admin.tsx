@@ -73,7 +73,7 @@ import {
 } from "@/components/ui/select";
 import { Brand, Pick } from "./marketplace";
 import Account from "./account";
-import { samples, money, methodName, type Listing } from "@/lib/catalog";
+import { money, methodName } from "@/lib/catalog";
 const navigation = [
   ["Dashboard", LayoutDashboard],
   ["Collateral", Boxes],
@@ -89,55 +89,7 @@ const navigation = [
   ["Users & security", Users],
   ["Configuration", Settings],
 ] as const;
-const previewApprovals = [
-  {
-    id: "sample-approval-1",
-    action_type: "publish_listing",
-    entity_id: "sample-hilux",
-    reason:
-      "Sale authorization checked. Valuation and collection point recorded.",
-    requested_by: "sample-operator",
-    requested_name: "M. Phiri · Operator",
-    public_title: "Toyota Hilux Double Cab",
-    required_min_level: 3,
-    status: "pending",
-    proposed_values: { price: "18500000", method: "Auction" },
-  },
-  {
-    id: "sample-approval-2",
-    action_type: "price_change",
-    entity_id: "sample-fridge",
-    reason: "Condition reassessed after physical inspection.",
-    requested_by: "sample-operator",
-    requested_name: "T. Banda · Operator",
-    public_title: "Samsung Double-door Fridge",
-    required_min_level: 3,
-    status: "pending",
-    proposed_values: { previous: "700000", proposed: "650000" },
-  },
-];
-const previewOrders = [
-  {
-    id: "sample-order-1",
-    order_no: "ORD-2026-00091",
-    public_title: "Sony PlayStation 5",
-    amount_due: 420000,
-    status: "paid",
-    tx_ref: "SAMPLE-PC-091",
-    created_at: "2026-10-05T08:20:00Z",
-  },
-  {
-    id: "sample-order-2",
-    order_no: "ORD-2026-00092",
-    public_title: "Apple iPhone 13",
-    amount_due: 485000,
-    status: "awaiting_payment",
-    tx_ref: "SAMPLE-PC-092",
-    created_at: "2026-10-05T09:30:00Z",
-  },
-];
 export default function Admin({ connected }: { connected: boolean }) {
-  const [demo, setDemo] = useState(false);
   const [view, setView] = useState("Dashboard");
   const [staff, setStaff] = useState<any>(null);
   const [query, setQuery] = useState("");
@@ -158,7 +110,7 @@ export default function Admin({ connected }: { connected: boolean }) {
         });
   }, [connected]);
   useEffect(() => {
-    if (demo || !staff) return;
+    if (!staff) return;
     setLoading(true);
     fetch("/api/admin/data")
       .then(async (r) => {
@@ -168,30 +120,17 @@ export default function Admin({ connected }: { connected: boolean }) {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [demo, staff, view, success]);
-  const listings: Listing[] = demo ? samples : records.listings || [];
-  const assets = demo
-    ? samples.map((i, index) => ({
-        ...i,
-        asset_ref: "COL-2026-" + (101 + index),
-        external_loan_id: "LN-2026-" + (7841 + index),
-        custody_location: i.location,
-        status: index === 3 ? "sale_review" : "listed",
-        valuation_amount: i.price,
-      }))
-    : records.assets || [];
-  const approvals = demo ? previewApprovals : records.approvals || [];
-  const orders = demo ? previewOrders : records.orders || [];
-  const level = demo ? 1 : staff?.security_level || 0;
+  }, [staff, view, success]);
+  const listings = records.listings || [];
+  const assets = records.assets || [];
+  const approvals = records.approvals || [];
+  const orders = records.orders || [];
+  const level = staff?.security_level || 0;
   const write = async (path: string, body: any) => {
     setBusy(true);
     setError("");
     setSuccess("");
     try {
-      if (demo)
-        throw Error(
-          "This is a read-only sample workspace. Sign in with a connected staff account to save changes.",
-        );
       const r = await fetch("/api/admin/" + path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -214,9 +153,6 @@ export default function Admin({ connected }: { connected: boolean }) {
     setModal(type);
   }
   function exportCsv() {
-    if (demo) {
-      setSuccess("Sample report exported.");
-    }
     const rows =
       view === "Audit explorer"
         ? records.audit || []
@@ -241,9 +177,9 @@ export default function Admin({ connected }: { connected: boolean }) {
     a.download = "cmrp-" + view.toLowerCase().replaceAll(" ", "-") + ".csv";
     a.click();
     URL.revokeObjectURL(a.href);
-    if (!demo) write("export", { report: view });
+    write("export", { report: view });
   }
-  if (!staff && !demo)
+  if (!staff)
     return (
       <>
         <header className="public-header">
@@ -278,7 +214,6 @@ export default function Admin({ connected }: { connected: boolean }) {
           <SidebarMenu className="admin-nav">
             {navigation.map(([title, Icon]) => {
               if (
-                !demo &&
                 level < 4 &&
                 ["Users & security", "Configuration"].includes(title)
               )
@@ -329,46 +264,23 @@ export default function Admin({ connected }: { connected: boolean }) {
           <span>/ {view}</span>
           <div className="user-pill">
             <ShieldCheck size={15} />
-            {demo
-              ? "Read-only preview"
-              : "Level " + level + " · " + staff?.full_name}
+            {"Level " + level + " · " + staff?.full_name}
             <span className="avatar">
-              {demo ? "PV" : staff?.full_name?.slice(0, 2).toUpperCase()}
+              {staff?.full_name?.slice(0, 2).toUpperCase()}
             </span>
-            {!demo && (
-              <button
-                aria-label="Sign out"
-                className="text-button"
-                onClick={async () => {
-                  await fetch("/api/auth/logout", { method: "POST" });
-                  setStaff(null);
-                }}
-              >
-                <LogOut size={15} />
-              </button>
-            )}
+            <button
+              aria-label="Sign out"
+              className="text-button"
+              onClick={async () => {
+                await fetch("/api/auth/logout", { method: "POST" });
+                setStaff(null);
+              }}
+            >
+              <LogOut size={15} />
+            </button>
           </div>
         </header>
         <main className="admin-content">
-          {demo && (
-            <div className="admin-preview">
-              <ShieldCheck size={15} />
-              <span>
-                Sample workspace · Figures and records are illustrative. Changes
-                are disabled.
-              </span>
-              <button
-                className="text-button"
-                onClick={() => {
-                  if (connected) setDemo(false);
-                  else open("connection");
-                }}
-              >
-                Staff sign in{" "}
-                <ArrowUpRight size={12} style={{ display: "inline" }} />
-              </button>
-            </div>
-          )}
           <div className="admin-heading">
             <div>
               <div className="eyebrow">INSTITUTIONAL RECOVERY</div>
@@ -416,7 +328,7 @@ export default function Admin({ connected }: { connected: boolean }) {
                 {[
                   [
                     "Net recovery",
-                    demo ? "MWK 24.8M" : money(records.kpis?.recovered || 0),
+                    money(records.kpis?.recovered || 0),
                     Wallet,
                     "Applied to loans",
                   ],
@@ -439,7 +351,7 @@ export default function Admin({ connected }: { connected: boolean }) {
                     "Live auctions",
                     String(
                       listings.filter(
-                        (i) =>
+                        (i: any) =>
                           i.method.includes("auction") && i.status === "live",
                       ).length,
                     ),
@@ -464,22 +376,10 @@ export default function Admin({ connected }: { connected: boolean }) {
                       <h2>Recovery performance</h2>
                       <p>Verified net value allocated to loans</p>
                     </div>
-                    <span>
-                      {demo ? "ILLUSTRATIVE · 6 MONTHS" : "LAST 6 MONTHS"}
-                    </span>
+                    <span>LAST 6 MONTHS</span>
                   </div>
                   <div className="recovery-chart">
-                    {(demo
-                      ? [
-                          { month: "May", amount: 35 },
-                          { month: "Jun", amount: 48 },
-                          { month: "Jul", amount: 43 },
-                          { month: "Aug", amount: 64 },
-                          { month: "Sep", amount: 72 },
-                          { month: "Oct", amount: 87 },
-                        ]
-                      : records.chart || []
-                    ).map((m: any) => (
+                    {(records.chart || []).map((m: any) => (
                       <div className="chart-column" key={m.month}>
                         <div
                           style={{ height: m.amount + "%" }}
@@ -491,7 +391,7 @@ export default function Admin({ connected }: { connected: boolean }) {
                   </div>
                   <div className="chart-legend">
                     <i />
-                    Net loan recovery {demo && "· sample trend"}
+                    Net loan recovery
                   </div>
                 </div>
                 <div className="panel">
@@ -517,9 +417,7 @@ export default function Admin({ connected }: { connected: boolean }) {
                       [
                         Link2,
                         "Loan integration",
-                        demo
-                          ? "Sample sync exception"
-                          : "Review recovery posting status",
+                        "Review recovery posting status",
                         "Settlements",
                       ],
                     ].map(([Icon, title, text, target]: any) => (
@@ -576,7 +474,7 @@ export default function Admin({ connected }: { connected: boolean }) {
                   />
                 </label>
                 <span className="badge">
-                  {demo ? "Sample records" : "Authorized records"}
+                  Authorized records
                 </span>
               </div>
               <AssetsTable
@@ -654,19 +552,7 @@ export default function Admin({ connected }: { connected: boolean }) {
           )}
           {view === "Offers" && (
             <DataPanel
-              rows={
-                demo
-                  ? [
-                      {
-                        id: "sample-offer",
-                        listing: "Apple iPhone 13",
-                        amount: 450000,
-                        status: "open",
-                        expires_at: "2026-10-07T12:00:00Z",
-                      },
-                    ]
-                  : records.offers || []
-              }
+              rows={records.offers || []}
               columns={["listing", "amount", "status", "expires_at"]}
               onOpen={(r) => open("offer", r)}
             />
@@ -709,47 +595,30 @@ export default function Admin({ connected }: { connected: boolean }) {
                 {[
                   [
                     "Gross sale",
-                    money(demo ? 20000000 : records.kpis?.gross || 0),
+                    money(records.kpis?.gross || 0),
                   ],
                   [
                     "Approved costs",
-                    money(demo ? 400000 : records.kpis?.fees || 0),
+                    money(records.kpis?.fees || 0),
                   ],
                   [
                     "Loan recovery",
-                    money(demo ? 18500000 : records.kpis?.recovered || 0),
+                    money(records.kpis?.recovered || 0),
                   ],
                   [
                     "Owner surplus",
-                    money(demo ? 1100000 : records.kpis?.surplus || 0),
+                    money(records.kpis?.surplus || 0),
                   ],
                 ].map(([l, v]) => (
                   <div className="kpi" key={l}>
                     <div className="kpi-head">{l}</div>
                     <strong style={{ fontSize: 22 }}>{v}</strong>
-                    <small>
-                      {demo
-                        ? "Illustrative allocation"
-                        : "Approved ledger lines"}
-                    </small>
+                    <small>Approved ledger lines</small>
                   </div>
                 ))}
               </div>
               <DataPanel
-                rows={
-                  demo
-                    ? [
-                        {
-                          id: "sample-settlement",
-                          order_no: "ORD-2026-00088",
-                          gross_sale: 20000000,
-                          rule_version: "FEE-V1",
-                          status: "pending_approval",
-                          loan_sync: "pending",
-                        },
-                      ]
-                    : records.settlements || []
-                }
+                rows={records.settlements || []}
                 columns={[
                   "order_no",
                   "gross_sale",
@@ -779,35 +648,7 @@ export default function Admin({ connected }: { connected: boolean }) {
                 </span>
               </div>
               <DataPanel
-                rows={(demo
-                  ? [
-                      {
-                        id: 1,
-                        occurred_at: "2026-10-05T09:40:00Z",
-                        actor: "M. Phiri",
-                        action: "listing.created",
-                        entity_id: "COL-2026-101",
-                        source: "web",
-                      },
-                      {
-                        id: 2,
-                        occurred_at: "2026-10-05T09:35:00Z",
-                        actor: "T. Banda",
-                        action: "sale_authorization.approved",
-                        entity_id: "COL-2026-101",
-                        source: "web",
-                      },
-                      {
-                        id: 3,
-                        occurred_at: "2026-10-05T08:22:00Z",
-                        actor: "System",
-                        action: "payment.verified",
-                        entity_id: "ORD-2026-00091",
-                        source: "webhook",
-                      },
-                    ]
-                  : records.audit || []
-                ).filter((a: any) =>
+                rows={(records.audit || []).filter((a: any) =>
                   JSON.stringify(a).toLowerCase().includes(query.toLowerCase()),
                 )}
                 columns={[
@@ -867,30 +708,7 @@ export default function Admin({ connected }: { connected: boolean }) {
                   </button>
                 </div>
                 <DataPanel
-                  rows={
-                    demo
-                      ? [
-                          {
-                            id: "sample-viewer",
-                            full_name: "A. Mbewe",
-                            security_level: 1,
-                            is_active: true,
-                          },
-                          {
-                            id: "sample-operator",
-                            full_name: "M. Phiri",
-                            security_level: 2,
-                            is_active: true,
-                          },
-                          {
-                            id: "sample-approver",
-                            full_name: "T. Banda",
-                            security_level: 3,
-                            is_active: true,
-                          },
-                        ]
-                      : records.staff || []
-                  }
+                  rows={records.staff || []}
                   columns={["full_name", "security_level", "is_active"]}
                   onOpen={(r) => open("staff", r)}
                 />
@@ -1037,9 +855,7 @@ export default function Admin({ connected }: { connected: boolean }) {
         >
           <DialogTitle>{modalTitle[modal] || "Record details"}</DialogTitle>
           <DialogDescription>
-            {demo
-              ? "Read-only sample workspace. Use connected staff access to save."
-              : "Actions are checked on the server and recorded in the audit trail."}
+            Actions are checked on the server and recorded in the audit trail.
           </DialogDescription>
           {modal === "connection" ? (
             <p className="account-stat">
@@ -1464,6 +1280,9 @@ function AdminForm({
   const [assetId, setAssetId] = useState(
     assets.some((asset) => asset.id === selected?.id) ? selected.id : "",
   );
+  const [imageUrl, setImageUrl] = useState(selected?.image || "");
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imageError, setImageError] = useState("");
   const matchingAuthorizations = authorizations.filter(
     (authorization) =>
       authorization.asset_id === assetId && authorization.status === "approved",
@@ -1635,8 +1454,62 @@ function AdminForm({
             <textarea name="defects" required />
           </label>
           <label>
+            Upload listing photo (JPEG, PNG or WebP, up to 5 MB)
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              disabled={uploadingImage || busy}
+              onChange={async (event) => {
+                const input = event.currentTarget;
+                const file = input.files?.[0];
+                if (!file) return;
+                setImageError("");
+                setUploadingImage(true);
+                try {
+                  const data = new FormData();
+                  data.set("file", file);
+                  const response = await fetch("/api/admin/listing-image", {
+                    method: "POST",
+                    body: data,
+                  });
+                  const result: any = await response.json();
+                  if (!response.ok) throw Error(result.error);
+                  setImageUrl(result.image);
+                } catch (error) {
+                  setImageError((error as Error).message);
+                } finally {
+                  setUploadingImage(false);
+                  input.value = "";
+                }
+              }}
+            />
+            {uploadingImage && <span className="muted">Uploading image…</span>}
+            {imageError && <span className="error">{imageError}</span>}
+            {imageUrl && (
+              <img
+                src={imageUrl}
+                alt="Selected listing"
+                style={{
+                  display: "block",
+                  width: 112,
+                  height: 84,
+                  marginTop: 8,
+                  objectFit: "contain",
+                  background: "#f3f6f6",
+                  borderRadius: 5,
+                }}
+              />
+            )}
+          </label>
+          <label>
             Image URL
-            <input name="image" type="url" required />
+            <input
+              name="image"
+              type="url"
+              value={imageUrl}
+              onChange={(event) => setImageUrl(event.target.value)}
+              required
+            />
           </label>
           <label>
             Approved terms version
