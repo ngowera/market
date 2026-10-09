@@ -47,9 +47,10 @@ runtime.serve(async (request: Request) => {
     );
 
   const url = new URL(request.url);
-  const path = url.pathname
-    .slice(apiPrefix.length)
-    .replace(/^\/+|\/+$/g, "");
+  const routePath = url.pathname.startsWith(apiPrefix)
+    ? url.pathname.slice(apiPrefix.length)
+    : url.pathname.replace(/^\/api(?=\/|$)/, "");
+  const path = routePath.replace(/^\/+|\/+$/g, "");
   const params = Promise.resolve({ path: path ? path.split("/") : [] });
   const response =
     request.method === "GET"
