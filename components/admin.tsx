@@ -284,7 +284,11 @@ export default function Admin({ connected }: { connected: boolean }) {
           <div className="admin-heading">
             <div>
               <div className="eyebrow">INSTITUTIONAL RECOVERY</div>
-              <h1>{view === "Dashboard" ? "Your recovery overview" : view}</h1>
+              <h1>
+                {view === "Dashboard"
+                  ? `Welcome, ${staff?.full_name?.trim().split(/\s+/)[0] || "Admin"}`
+                  : view}
+              </h1>
               <p>
                 {view === "Dashboard"
                   ? "A clear view of assets, approvals and recovered value."
