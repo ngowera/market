@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import {useCatalogTools} from "@/lib/webmcp";
 import {
@@ -318,6 +318,14 @@ export default function Marketplace({
   const [sort, setSort] = useState("featured");
   const [condition, setCondition] = useState("all");
   const [max, setMax] = useState("");
+  const [featuredIndex, setFeaturedIndex] = useState(0);
+  const [previousFeaturedIndex, setPreviousFeaturedIndex] = useState<number | null>(null);
+  const [featuredTransitioning, setFeaturedTransitioning] = useState(false);
+  const [featuredPaused, setFeaturedPaused] = useState(false);
+  const [desktopHero, setDesktopHero] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const featuredIndexRef = useRef(0);
+  const featuredTransitionTimeout = useRef<number | null>(null);
   useEffect(() => {
     let active = true;
     const refresh = async () => {
@@ -369,6 +377,68 @@ export default function Marketplace({
               new Date(b.ends_at || "2100").getTime()
             : 0,
     );
+    const featuredCategories = new Map<string, Listing>();
+    for (const listing of listings) {
+      if (listing.image && !featuredCategories.has(listing.category)) {
+        featuredCategories.set(listing.category, listing);
+      }
+    }
+    const featuredListings = Array.from(featuredCategories.values());
+    const featuredKey = featuredListings.map((listing) => listing.id).join("|");
+    const featuredListing = featuredListings[featuredIndex] || listings[0];
+
+    useEffect(() => {
+      const desktopQuery = window.matchMedia("(min-width: 1101px)");
+      const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+      const updateMedia = () => {
+        setDesktopHero(desktopQuery.matches);
+        setReducedMotion(motionQuery.matches);
+      };
+      updateMedia();
+      desktopQuery.addEventListener("change", updateMedia);
+      motionQuery.addEventListener("change", updateMedia);
+      return () => {
+        desktopQuery.removeEventListener("change", updateMedia);
+        motionQuery.removeEventListener("change", updateMedia);
+      };
+    }, []);
+
+    useEffect(() => {
+      featuredIndexRef.current = 0;
+      setFeaturedIndex(0);
+      setPreviousFeaturedIndex(null);
+      setFeaturedTransitioning(false);
+    }, [featuredKey]);
+
+    useEffect(() => {
+      if (!desktopHero || reducedMotion || featuredPaused || featuredListings.length < 2) return;
+      const interval = window.setInterval(() => {
+        const nextIndex = (featuredIndexRef.current + 1) % featuredListings.length;
+        setPreviousFeaturedIndex(featuredIndexRef.current);
+        featuredIndexRef.current = nextIndex;
+        setFeaturedIndex(nextIndex);
+        setFeaturedTransitioning(true);
+      }, 4000);
+      return () => {
+        window.clearInterval(interval);
+      };
+    }, [desktopHero, featuredKey, featuredListings.length, featuredPaused, reducedMotion]);
+
+    useEffect(() => {
+      if (!featuredTransitioning) return;
+      featuredTransitionTimeout.current = window.setTimeout(() => {
+        setFeaturedTransitioning(false);
+        setPreviousFeaturedIndex(null);
+        featuredTransitionTimeout.current = null;
+      }, 900);
+      return () => {
+        if (featuredTransitionTimeout.current !== null) {
+          window.clearTimeout(featuredTransitionTimeout.current);
+          featuredTransitionTimeout.current = null;
+        }
+      };
+    }, [featuredTransitioning, featuredIndex]);
+
   return (
     <>
       <Header
@@ -377,7 +447,7 @@ export default function Marketplace({
         onSaleMethodChange={setMethod}
       />
       <main>
-        {!browse && listings.length > 0 ? (
+        {!browse && listings.length > 0 && featuredListing ? (
           <section className="hero">
             <div className="hero-content">
               <div className="hero-kicker">
@@ -424,32 +494,54 @@ export default function Marketplace({
                 </span>
               </div>
             </div>
-            <div className="hero-visual">
+            <div
+              className="hero-visual"
+              onMouseEnter={() => setFeaturedPaused(true)}
+              onMouseLeave={() => setFeaturedPaused(false)}
+              onFocusCapture={() => setFeaturedPaused(true)}
+              onBlurCapture={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                  setFeaturedPaused(false);
+                }
+              }}
+            >
               <div className="visual-orbit" />
               <div className="featured-label">
                 FEATURED LISTING
               </div>
-              <img
-                src={listings[0].image}
-                alt={listings[0].title}
-              />
+              <div className="featured-image-frame">
+                {featuredTransitioning && previousFeaturedIndex !== null && featuredListings[previousFeaturedIndex] && (
+                  <img
+                    className="featured-slide featured-slide-out"
+                    src={featuredListings[previousFeaturedIndex].image}
+                    alt=""
+                    aria-hidden="true"
+                  />
+                )}
+                <img
+                  key={featuredListing.id}
+                  className={"featured-slide " + (featuredTransitioning ? "featured-slide-in" : "featured-slide-active")}
+                  src={featuredListing.image}
+                  alt={featuredListing.title}
+                />
+              </div>
               <div className="hero-asset-caption">
                 <div>
                   <span>
-                    {listings[0].category.toUpperCase()} · {listings[0].location.toUpperCase()}
+                    {featuredListing.category.toUpperCase()} · {featuredListing.location.toUpperCase()}
                   </span>
-                  <h2>{listings[0].title}</h2>
+                  <h2>{featuredListing.title}</h2>
                 </div>
                 <Link
-                  href={"/listing/" + listings[0].slug}
-                  aria-label={"View " + listings[0].title}
+                  href={"/listing/" + featuredListing.slug}
+                  aria-label={"View " + featuredListing.title}
                 >
                   <ArrowUpRight />
                 </Link>
               </div>
               <div className="float-label">
                 <span className="status-dot" />
-                {methodName(listings[0].method)} <b>{money(listings[0].price)}</b>
+                {methodName(featuredListing.method)} <b>{money(featuredListing.price)}</b>
               </div>
             </div>
           </section>
