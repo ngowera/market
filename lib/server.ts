@@ -46,10 +46,16 @@ export async function sb(
     cache: "no-store",
   });
   const body: any = await r.json().catch(() => null);
-  if (!r.ok)
-    throw Object.assign(new Error(
-      body?.message || body?.error_description || "Request failed",
-    ), { code: body?.code });
+  if (!r.ok) {
+    const message =
+      body?.message ||
+      body?.msg ||
+      body?.error_description ||
+      body?.error ||
+      body?.hint ||
+      "Request failed";
+    throw Object.assign(new Error(message), { code: body?.code });
+  }
   return body;
 }
 export async function getPublicListings(): Promise<{
