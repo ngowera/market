@@ -1793,6 +1793,82 @@ footer a:not(.brand) {
   grid-template-columns: 1fr 1fr;
   gap: 20px;
 }
+.report-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.report-chart-panel {
+  min-width: 0;
+  padding: 21px;
+}
+.report-chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 74px;
+}
+.report-chart-header > div:first-child > svg {
+  color: #16866a;
+  margin-bottom: 9px;
+}
+.report-chart-header h2 {
+  margin: 0;
+  color: #243f51;
+  font-size: 16px;
+}
+.report-chart-header p {
+  max-width: 440px;
+  margin: 6px 0 0;
+  color: #7b8f99;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.report-chart-switch {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 3px;
+  border: 1px solid #dbe5e8;
+  border-radius: 6px;
+  background: #f5f8f9;
+}
+.report-chart-switch button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #758994;
+  font-size: 11px;
+  cursor: pointer;
+}
+.report-chart-switch button.active {
+  background: #fff;
+  color: #176f5e;
+  box-shadow: 0 1px 3px #142b3b1a;
+}
+.report-chart-plot {
+  width: 100%;
+  height: 280px;
+  margin-top: 10px;
+}
+.report-chart-empty {
+  display: grid;
+  place-items: center;
+  height: 280px;
+  margin-top: 10px;
+  border-top: 1px solid #e7edef;
+  color: #82939b;
+  font-size: 12px;
+}
+.report-export {
+  margin-top: 6px;
+  font-size: 11px;
+}
 .admin-settings h2 {
   font-size: 17px;
   margin-bottom: 20px;
@@ -2339,6 +2415,23 @@ footer a:not(.brand) {
   }
   .admin-settings {
     grid-template-columns: 1fr;
+  }
+  .report-chart-grid {
+    grid-template-columns: 1fr;
+  }
+  .report-chart-panel {
+    padding: 16px;
+  }
+  .report-chart-header {
+    flex-direction: column;
+    min-height: 0;
+  }
+  .report-chart-header > div:first-child {
+    width: 100%;
+  }
+  .report-chart-plot,
+  .report-chart-empty {
+    height: 250px;
   }
   .approval-card {
     display: block;

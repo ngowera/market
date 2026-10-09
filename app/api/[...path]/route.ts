@@ -163,6 +163,9 @@ async function get(request: Request, path: string) {
       "orders",
       "settlements",
       "system_settings",
+      "payments",
+      "integration_outbox",
+      "disputes",
     ];
     if (staff.security_level >= 2)
       names.push("collateral_assets", "sale_authorizations", "offers", "listings", "auctions", "release_orders");
@@ -180,6 +183,12 @@ async function get(request: Request, path: string) {
                   ? "listing_id,starting_bid,current_price,min_increment,ends_at"
                   : n === "release_orders"
                     ? "id,order_id,status,collector_name,collector_ref,approved_by,approved_at,released_at,released_by"
+                        : n === "payments"
+                          ? "id,order_id,status,created_at,amount,currency"
+                          : n === "integration_outbox"
+                            ? "id,status,created_at,attempts"
+                            : n === "disputes"
+                              ? "id,status,created_at"
                     : "*";
         const ordering =
           n === "system_settings"
@@ -222,6 +231,48 @@ async function get(request: Request, path: string) {
         .filter((approval: any) => approval.action_type === "release" && approval.status === "pending")
         .map((approval: any) => [approval.entity_id, approval]),
     );
+    const reportMonths = Array.from({ length: 6 }, (_, offset) => {
+      const date = new Date();
+      date.setDate(1);
+      date.setMonth(date.getMonth() - (5 - offset));
+      return {
+        key: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`,
+        month: date.toLocaleString("en", { month: "short" }),
+        fixed_price: 0,
+        auction_win: 0,
+        accepted_offer: 0,
+      };
+    });
+    const salesByMonth = new Map(reportMonths.map((month) => [month.key, month]));
+    for (const order of d.orders || []) {
+      if (!["paid", "released", "closed", "disputed"].includes(order.status)) continue;
+      const date = new Date(order.paid_at || order.created_at);
+      const month = salesByMonth.get(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`);
+      if (month && ["fixed_price", "auction_win", "accepted_offer"].includes(order.source)) {
+        const source = order.source as "fixed_price" | "auction_win" | "accepted_offer";
+        month[source] += Number(order.amount_due || 0);
+      }
+    }
+    const ageBands = [
+      { age: "0–30 days", assets: 0 },
+      { age: "31–90 days", assets: 0 },
+      { age: "91–180 days", assets: 0 },
+      { age: "Over 180 days", assets: 0 },
+    ];
+    for (const asset of d.collateral_assets || []) {
+      if (["sold", "released", "closed"].includes(asset.status) || !asset.created_at) continue;
+      const ageDays = Math.max(0, Math.floor((Date.now() - new Date(asset.created_at).getTime()) / 86400000));
+      const band = ageDays <= 30 ? 0 : ageDays <= 90 ? 1 : ageDays <= 180 ? 2 : 3;
+      ageBands[band].assets += 1;
+    }
+    const exceptionCounts = [
+      { issue: "Failed payments", count: (d.payments || []).filter((payment: any) => payment.status === "failed" || payment.status === "disputed").length },
+      { issue: "Open disputes", count: (d.disputes || []).filter((dispute: any) => ["open", "pending"].includes(dispute.status)).length },
+      { issue: "Loan sync failures", count: (d.integration_outbox || []).filter((item: any) => item.status === "dead_letter" || item.status === "failed").length },
+      { issue: "Pending approvals", count: (d.approval_requests || []).filter((approval: any) => approval.status === "pending").length },
+      { issue: "Paid, awaiting handover", count: (d.orders || []).filter((order: any) => order.status === "paid").length },
+    ];
+    const metrics = await rpc("dashboard_metrics", {}, token);
     if (staff.security_level >= 2 && d.collateral_assets) {
       const media = await sb(
         "/rest/v1/asset_media?media_type=eq.public_image&select=asset_id,storage_path,sort_order&order=sort_order.asc&limit=500",
@@ -258,6 +309,17 @@ async function get(request: Request, path: string) {
         release_approval: pendingReleaseByOrder.get(order.id) || null,
       })),
       settlements: d.settlements,
+      reportData: {
+        recovery: Array.isArray(metrics.chart) ? metrics.chart : [],
+        assetAging: ageBands,
+        salesPerformance: reportMonths.map((month) => ({
+          month: month.month,
+          fixed_price: month.fixed_price,
+          auction_win: month.auction_win,
+          accepted_offer: month.accepted_offer,
+        })),
+        exceptions: exceptionCounts,
+      },
       logs: await rpc("admin_audit_log", {}, token),
       staff: d.staff_profiles,
       offers: d.offers,
@@ -268,7 +330,7 @@ async function get(request: Request, path: string) {
         paychangu: Boolean(env("PAYCHANGU_SECRET_KEY") && env("PAYCHANGU_WEBHOOK_SECRET")),
         loan_bridge: Boolean(env("LOAN_API_URL") && env("LOAN_API_TOKEN") && env("INTEGRATION_JOB_SECRET")),
       },
-      ...(await rpc("dashboard_metrics",{},token)),
+      ...metrics,
     });
   }
   return json({ error: "Endpoint not found" }, 404);

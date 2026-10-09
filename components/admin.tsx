@@ -81,6 +81,9 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  BarChart,
+  Bar,
+  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -115,6 +118,7 @@ export default function Admin({ connected }: { connected: boolean }) {
   const [loading, setLoading] = useState(false);
   const [selectedListingIds, setSelectedListingIds] = useState<string[]>([]);
   const [archiveSelection, setArchiveSelection] = useState<string[]>([]);
+  const [reportGraphModes, setReportGraphModes] = useState<Record<string, "line" | "bar">>({});
   useEffect(() => {
     if (connected)
       fetch("/api/session")
@@ -162,6 +166,7 @@ export default function Admin({ connected }: { connected: boolean }) {
   const orders = records.orders || [];
   const attention = records.attention || {};
   const chartData = Array.isArray(records.chart) ? records.chart : [];
+  const reportData = records.reportData || {};
   const pendingApprovalCount = Number(
     attention.pending_approvals ?? approvals.filter((a: any) => a.status === "pending").length,
   );
@@ -190,6 +195,52 @@ export default function Admin({ connected }: { connected: boolean }) {
   const activeFeeRule = (records.fee_rules || []).find(
     (rule: any) => rule.is_active && new Date(rule.effective_at).getTime() <= Date.now(),
   );
+  const reportCharts = [
+    {
+      key: "recovery",
+      title: "Recovery report",
+      description: "Monthly gross sales, loan recovery and owner surplus from approved settlements.",
+      data: reportData.recovery || chartData,
+      xKey: "month",
+      money: true,
+      series: [
+        { key: "gross", label: "Gross sales", color: "#16866a" },
+        { key: "recovered", label: "Loan recovery", color: "#3273a0" },
+        { key: "surplus", label: "Owner surplus", color: "#bd812e" },
+      ],
+    },
+    {
+      key: "aging",
+      title: "Asset aging",
+      description: "Assets still in custody by actual time since intake.",
+      data: reportData.assetAging || [],
+      xKey: "age",
+      money: false,
+      series: [{ key: "assets", label: "Assets in custody", color: "#3273a0" }],
+    },
+    {
+      key: "sales",
+      title: "Sales performance",
+      description: "Completed sale value by month and sale channel.",
+      data: reportData.salesPerformance || [],
+      xKey: "month",
+      money: true,
+      series: [
+        { key: "fixed_price", label: "Fixed price", color: "#16866a" },
+        { key: "auction_win", label: "Auction", color: "#3273a0" },
+        { key: "accepted_offer", label: "Accepted offer", color: "#bd812e" },
+      ],
+    },
+    {
+      key: "exceptions",
+      title: "Exceptions",
+      description: "Current payment, dispute, loan-sync, approval and handover issues.",
+      data: reportData.exceptions || [],
+      xKey: "issue",
+      money: false,
+      series: [{ key: "count", label: "Open items", color: "#bd812e" }],
+    },
+  ];
   const level = staff?.security_level || 0;
   const write = async (path: string, body: any) => {
     setBusy(true);
@@ -824,39 +875,61 @@ export default function Admin({ connected }: { connected: boolean }) {
             </>
           )}
           {view === "Reports" && (
-            <div className="admin-settings">
-              {[
-                [
-                  "Recovery report",
-                  "Gross sales, fees, loan allocation and owner surplus.",
-                ],
-                [
-                  "Asset aging",
-                  "Time in custody, time to list and time to verified payment.",
-                ],
-                [
-                  "Sales performance",
-                  "Auction outcomes, fixed-price conversion and buyer offers.",
-                ],
-                [
-                  "Exceptions",
-                  "Payment mismatches, uncollected assets and pending loan sync.",
-                ],
-              ].map(([t, p]) => (
-                <div className="panel" key={t}>
-                  <BarChart3 color="#087c68" size={25} />
-                  <h2 style={{ marginTop: 20, marginBottom: 10 }}>{t}</h2>
-                  <p className="account-stat">{p}</p>
-                  <button
-                    className="text-button"
-                    style={{ marginTop: 15 }}
-                    onClick={exportCsv}
-                  >
-                    Export authorized records{" "}
-                    <Download size={13} style={{ display: "inline" }} />
-                  </button>
-                </div>
-              ))}
+            <div className="report-chart-grid">
+              {reportCharts.map((chart) => {
+                const mode = reportGraphModes[chart.key] || "line";
+                const hasValues = chart.data.some((point: any) =>
+                  chart.series.some((series) => Number(point[series.key] || 0) !== 0),
+                );
+                return (
+                  <section className="panel report-chart-panel" key={chart.key}>
+                    <header className="report-chart-header">
+                      <div>
+                        <BarChart3 size={19} aria-hidden="true" />
+                        <h2>{chart.title}</h2>
+                        <p>{chart.description}</p>
+                      </div>
+                      <div className="report-chart-switch" role="group" aria-label={`${chart.title} chart style`}>
+                        <button
+                          type="button"
+                          className={mode === "line" ? "active" : ""}
+                          aria-pressed={mode === "line"}
+                          onClick={() => setReportGraphModes((current) => ({ ...current, [chart.key]: "line" }))}
+                        >
+                          <TrendingUp size={15} /> Line
+                        </button>
+                        <button
+                          type="button"
+                          className={mode === "bar" ? "active" : ""}
+                          aria-pressed={mode === "bar"}
+                          onClick={() => setReportGraphModes((current) => ({ ...current, [chart.key]: "bar" }))}
+                        >
+                          <BarChart3 size={15} /> Bar
+                        </button>
+                      </div>
+                    </header>
+                    {hasValues ? (
+                      <ReportGraph
+                        data={chart.data}
+                        xKey={chart.xKey}
+                        series={chart.series}
+                        mode={mode}
+                        moneyValues={chart.money}
+                      />
+                    ) : (
+                      <div className="report-chart-empty">
+                        <span>No recorded data for this report yet.</span>
+                      </div>
+                    )}
+                    <button
+                      className="text-button report-export"
+                      onClick={exportCsv}
+                    >
+                      Export authorized records <Download size={13} />
+                    </button>
+                  </section>
+                );
+              })}
             </div>
           )}
           {view === "Users & security" && (
@@ -1517,6 +1590,58 @@ function Empty({ text }: { text: string }) {
     </div>
   );
 }
+function ReportGraph({
+  data,
+  xKey,
+  series,
+  mode,
+  moneyValues,
+}: {
+  data: any[];
+  xKey: string;
+  series: { key: string; label: string; color: string }[];
+  mode: "line" | "bar";
+  moneyValues: boolean;
+}) {
+  const axisFormatter = (value: number) =>
+    moneyValues
+      ? `MWK ${new Intl.NumberFormat("en-MW", { notation: "compact", maximumFractionDigits: 1 }).format(value)}`
+      : new Intl.NumberFormat("en-MW", { notation: "compact", maximumFractionDigits: 1 }).format(value);
+  const tooltipFormatter = (value: any) =>
+    moneyValues ? money(Number(value)) : Number(value).toLocaleString();
+  const axisAngle = xKey === "issue" ? -18 : 0;
+
+  return (
+    <div className="report-chart-plot">
+      <ResponsiveContainer width="100%" height="100%">
+        {mode === "line" ? (
+          <LineChart data={data} margin={{ top: 12, right: 12, left: 4, bottom: axisAngle ? 30 : 4 }}>
+            <CartesianGrid stroke="#e6edef" strokeDasharray="4 4" vertical={false} />
+            <XAxis dataKey={xKey} axisLine={false} tickLine={false} interval={0} angle={axisAngle} textAnchor={axisAngle ? "end" : "middle"} height={axisAngle ? 64 : 32} tick={{ fill: "#82939b", fontSize: 10 }} />
+            <YAxis width={82} axisLine={false} tickLine={false} tickFormatter={axisFormatter} tick={{ fill: "#82939b", fontSize: 9 }} />
+            <Tooltip formatter={tooltipFormatter} />
+            <Legend />
+            {series.map((item) => (
+              <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={item.color} strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
+            ))}
+          </LineChart>
+        ) : (
+          <BarChart data={data} margin={{ top: 12, right: 12, left: 4, bottom: axisAngle ? 30 : 4 }}>
+            <CartesianGrid stroke="#e6edef" strokeDasharray="4 4" vertical={false} />
+            <XAxis dataKey={xKey} axisLine={false} tickLine={false} interval={0} angle={axisAngle} textAnchor={axisAngle ? "end" : "middle"} height={axisAngle ? 64 : 32} tick={{ fill: "#82939b", fontSize: 10 }} />
+            <YAxis width={82} axisLine={false} tickLine={false} tickFormatter={axisFormatter} tick={{ fill: "#82939b", fontSize: 9 }} />
+            <Tooltip formatter={tooltipFormatter} />
+            <Legend />
+            {series.map((item) => (
+              <Bar key={item.key} dataKey={item.key} name={item.label} fill={item.color} radius={[4, 4, 0, 0]} maxBarSize={38} />
+            ))}
+          </BarChart>
+        )}
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 function ListingEditForm({
   selected,
   busy,
