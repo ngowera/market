@@ -8,7 +8,7 @@ declare conflict_name text;
 begin
   perform pg_advisory_xact_lock(20261005,182742);
   if to_regclass('public.cmrp_installation') is not null then
-    if exists(select 1 from public.cmrp_installation where version='20261009163000_listing_photo_storage.sql') then
+    if exists(select 1 from public.cmrp_installation where version='20261009190000_configurable_staff_mfa.sql') then
       raise notice 'CMRP already installed; no changes made'; return;
     end if;
     raise exception 'Different CMRP version installed. Use migrations instead.';
@@ -704,11 +704,31 @@ begin
 end
 $$;
 
+-- Preserve MFA enforcement for configured staff while allowing documented exceptions.
+update public.staff_profiles
+set mfa_required=true
+where security_level>=3 and not mfa_required;
+
+create or replace function private.staff_level()
+returns smallint
+language sql
+stable
+security definer
+set search_path=''
+as $$
+  select coalesce((
+    select security_level
+    from public.staff_profiles
+    where user_id=auth.uid()
+      and is_active
+      and (not mfa_required or (auth.jwt()->>'aal')='aal2')
+  ),0)::smallint
+$$;
 $cmrp_schema$;
   create table public.cmrp_installation(version text primary key,installed_at timestamptz not null default now());
   alter table public.cmrp_installation enable row level security;
   revoke all on public.cmrp_installation from public,anon,authenticated;
-  insert into public.cmrp_installation(version) values('20261009163000_listing_photo_storage.sql');
+  insert into public.cmrp_installation(version) values('20261009190000_configurable_staff_mfa.sql');
 end
 $cmrp_installer$;
 notify pgrst, 'reload schema';

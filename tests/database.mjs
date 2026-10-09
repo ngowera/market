@@ -12,9 +12,9 @@ const sql=(await fs.readFile('supabase/setup.sql','utf8')).replace('create exten
 await db.exec(sql);
 await db.exec(sql);
 console.log('PASS: SQL installer executes and safely reruns on PostgreSQL');
-const maker='11111111-1111-4111-8111-111111111111',approver='22222222-2222-4222-8222-222222222222',buyer='33333333-3333-4333-8333-333333333333',other='44444444-4444-4444-8444-444444444444';
-await db.exec(`insert into auth.users(id,email,email_confirmed_at) values('${maker}','maker@test.invalid',now()),('${approver}','approver@test.invalid',now()),('${buyer}','buyer@test.invalid',now()),('${other}','other@test.invalid',now());
-insert into public.staff_profiles(user_id,full_name,security_level,is_active) values('${maker}','Maker',2,true),('${approver}','Approver',3,true);
+const maker='11111111-1111-4111-8111-111111111111',approver='22222222-2222-4222-8222-222222222222',buyer='33333333-3333-4333-8333-333333333333',other='44444444-4444-4444-8444-444444444444',noMfaStaff='55555555-5555-4555-8555-555555555555';
+await db.exec(`insert into auth.users(id,email,email_confirmed_at) values('${maker}','maker@test.invalid',now()),('${approver}','approver@test.invalid',now()),('${buyer}','buyer@test.invalid',now()),('${other}','other@test.invalid',now()),('${noMfaStaff}','no-mfa@test.invalid',now());
+insert into public.staff_profiles(user_id,full_name,security_level,is_active,mfa_required) values('${maker}','Maker',2,true,false),('${approver}','Approver',3,true,true),('${noMfaStaff}','Admin without MFA',4,true,false);
 insert into public.loans_bridge(id,source_system,external_loan_id,outstanding_amount) values('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','test','LN-1',850000);
 insert into public.collateral_assets(id,loan_bridge_id,asset_ref,title,category,created_by) values('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','COL-1','Test console','Gaming','${maker}');`);
 async function as(role,id,aal='aal2'){await db.exec(`reset role;select set_config('request.jwt.claim.sub','${id||''}',false);select set_config('request.jwt.claims','${JSON.stringify({role,aal})}',false);set role ${role};`)}
@@ -24,6 +24,7 @@ await as('authenticated',maker);const auth=(await db.query(`select public.reques
 await rejects(`select public.approve_action('${auth.id}','approved','Own approval')`,/permission|MFA/);console.log('PASS: Level 2 cannot call approval API');
 await db.exec('reset role');await db.exec(`update public.staff_profiles set security_level=3 where user_id='${maker}'`);await as('authenticated',maker);await rejects(`select public.approve_action('${auth.id}','approved','Own approval')`,/Independent/);console.log('PASS: maker cannot approve own request');
 await as('authenticated',approver,'aal1');await rejects(`select public.approve_action('${auth.id}','approved','Review complete')`,/permission|MFA/);console.log('PASS: senior staff MFA required');
+await as('authenticated',noMfaStaff,'aal1');assert.equal((await db.query('select private.staff_level() as level')).rows[0].level,4);console.log('PASS: staff profile can explicitly waive MFA');
 await as('authenticated',approver);await db.query(`select public.approve_action('${auth.id}','approved','Review complete')`);
 await db.exec('reset role');const authorization=(await db.query('select id from public.sale_authorizations')).rows[0].id;await db.exec(`update public.staff_profiles set security_level=2 where user_id='${maker}'`);
 await as('authenticated',maker);const listing=(await db.query(`select public.create_listing('${JSON.stringify({asset_id:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',sale_authorization_id:authorization,slug:'test-console',method:'auction',title:'Test Console',description:'Public description',price:'100000',increment:'10000',duration_hours:'2',collection_point:'Blantyre',terms_version:'test-v1',image:'https://example.invalid/test.webp',defects:'Used',reason:'Publish approved asset'})}') as d`)).rows[0].d;

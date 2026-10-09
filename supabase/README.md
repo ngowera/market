@@ -21,6 +21,6 @@ select id, 'Administrator', 4, true
 from auth.users where lower(email)=lower('REPLACE-WITH-STAFF-EMAIL');
 ```
 
-Check that one row was inserted. Senior staff must enroll and verify MFA in Account > Security before opening the admin workspace. Keep Supabase service-role and PayChangu secrets server-only; the anon key only permits public catalogue reads and the authenticated user's authorized operations. Payment and loan integration need their separate server credentials.
+Check that one row was inserted. Level 3 and Level 4 staff require MFA by default. An institution owner may explicitly set `mfa_required=false` for a named exception; this allows high-privilege sign-in without the second factor and reduces account protection. Keep Supabase service-role and PayChangu secrets server-only; the anon key only permits public catalogue reads and the authenticated user's authorized operations. Payment and loan integration need their separate server credentials.
 
 To regenerate the installer after editing the canonical migration, run `node scripts/generate-supabase-setup.mjs`. Never use the installer to upgrade an existing installation.

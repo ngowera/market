@@ -70,7 +70,7 @@ export async function staffUser(request: Request, min = 1) {
     throw new Error(
       "Your staff account does not have permission for this action.",
     );
-  if (staff.security_level >= 3) {
+  if (staff.mfa_required) {
     const payload = JSON.parse(
       atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")),
     );

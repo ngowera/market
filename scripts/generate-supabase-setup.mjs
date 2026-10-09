@@ -2,10 +2,12 @@ import fs from 'node:fs/promises';
 const migration='20261005182742_cmrp_foundation.sql';
 const upgrade='20261009120000_standalone_inventory.sql';
 const storageUpgrade='20261009163000_listing_photo_storage.sql';
-const installerVersion=storageUpgrade;
+const mfaUpgrade='20261009190000_configurable_staff_mfa.sql';
+const installerVersion=mfaUpgrade;
 const sql=await fs.readFile('supabase/migrations/'+migration,'utf8');
 const upgradeSql=await fs.readFile('supabase/migrations/'+upgrade,'utf8');
 const storageUpgradeSql=await fs.readFile('supabase/migrations/'+storageUpgrade,'utf8');
+const mfaUpgradeSql=await fs.readFile('supabase/migrations/'+mfaUpgrade,'utf8');
 const tables=[...sql.matchAll(/create table public\.(\w+)/g)].map(m=>m[1]);
 const types=[...sql.matchAll(/create type public\.(\w+)/g)].map(m=>m[1]);
 const output=`-- CMRP: paste this entire file into Supabase SQL Editor and Run as postgres.
@@ -36,6 +38,7 @@ begin
 ${sql}
 ${upgradeSql}
 ${storageUpgradeSql}
+${mfaUpgradeSql}
 $cmrp_schema$;
   create table public.cmrp_installation(version text primary key,installed_at timestamptz not null default now());
   alter table public.cmrp_installation enable row level security;

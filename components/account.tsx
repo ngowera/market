@@ -228,7 +228,7 @@ export default function Account({
                   <input
                     name="password"
                     type="password"
-                    minLength={12}
+                    minLength={mode === "signup" ? 12 : undefined}
                     required
                     autoComplete={
                       mode === "signup" ? "new-password" : "current-password"
