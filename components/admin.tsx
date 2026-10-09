@@ -272,10 +272,6 @@ export default function Admin({ connected }: { connected: boolean }) {
             })}
           </SidebarMenu>
           <div className="admin-sidebar-bottom">
-            <button className="text-button" onClick={() => setView("Logs")}>
-              <ScrollText size={15} />
-              Logs
-            </button>
             <p style={{ fontSize: 9, marginTop: 25, lineHeight: 1.8 }}>
               nyasamarket.com · Malawi
               <br />
