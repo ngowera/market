@@ -7,7 +7,6 @@ import { samples } from '../lib/catalog';
 import '../app/globals.css';
 
 if (typeof window !== 'undefined') {
-  const live = 'https://collateral-marketplace-recovery.parcelexpert2.chatgpt.site';
   const base = import.meta.env.BASE_URL.replace(/\/$/, '');
   const route = window.location.pathname.slice(base.length).replace(/\/$/, '') || '/';
 
@@ -21,6 +20,6 @@ if (typeof window !== 'undefined') {
 
   const item = samples.find(x => route === '/listing/' + x.slug);
   const content = route === '/admin' ? <Admin connected={false}/> : route === '/help' ? <Help/> : item ? <ListingDetail item={item} demo/> : route === '/' || route === '/browse' ? <Marketplace initial={samples} demo browse={route === '/browse'}/> : <><Header/><main className="help-layout"><article><h1>Page not found</h1><p>Public browsing is read-only. Secure account and admin access are kept behind a separate portal.</p></article></main><Footer/></>;
-  createRoot(document.getElementById('root')!).render(<><aside style={{padding:'12px 20px', background:'#fff3d4',color:'#453516',textAlign:'center',fontSize:14}}>GitHub Pages preview · sample listings and read-only admin. <a style={{textDecoration:'underline'}} href={live + (route === '/admin' ? '/admin' : '/')}>Open full website</a></aside>{content}</>);
+  createRoot(document.getElementById('root')!).render(content);
 }
 
