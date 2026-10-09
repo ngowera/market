@@ -122,6 +122,15 @@ await as('anon');const level4PublicListing=(await db.query(`select * from public
 await db.exec('reset role');assert.equal((await db.query(`select count(*)::integer as count from public.approval_requests where entity_id='${level4Listing.id}' and action_type='publish_listing'`)).rows[0].count,0);
 console.log('PASS: Level 4 listings publish immediately with no listing approval request');
 
+await db.query(`insert into public.approval_requests(action_type,entity_type,entity_id,requested_by,required_min_level,reason) values('publish_listing','listing','${level4Listing.id}','${noMfaStaff}',3,'Existing Level 4 pending listing')`);
+await db.query(`update public.listings set status='pending_approval',approved_by=null,publish_at=null where id='${level4Listing.id}'`);
+await db.exec(`select set_config('request.jwt.claim.sub','',false);select set_config('request.jwt.claims','{}',false);`);
+await db.exec(level4ListingMigration);
+assert.equal((await db.query(`select status from public.listings where id='${level4Listing.id}'`)).rows[0].status,'live');
+assert.equal((await db.query(`select status from public.approval_requests where entity_id='${level4Listing.id}' and action_type='publish_listing'`)).rows[0].status,'cancelled');
+assert.equal((await db.query(`select id from public.public_catalog where id='${level4Listing.id}'`)).rows.length,1);
+console.log('PASS: migration publishes existing eligible Level 4 listings and cancels their obsolete requests');
+
 await as('authenticated',maker);
 const level3Asset=(await db.query(`select public.create_asset('${JSON.stringify({title:'Level 3 reviewed listing asset',category:'Other',valuation_amount:'6000',currency:'MWK',custody_location:'Blantyre office',image_paths:['assets/level3-reviewed.webp'],reason:'Level 3 listing test'})}') as d`)).rows[0].d;
 const level3Authorization=(await db.query(`select public.request_authorization('${level3Asset.id}','{"basis":"Level 3 listing test","reference_no":"AUTH-L3-REVIEW","reason":"Test authorization","evidence_path":"evidence/l3-review.pdf"}') as d`)).rows[0].d;

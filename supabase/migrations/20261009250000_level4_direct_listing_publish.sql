@@ -96,3 +96,43 @@ begin
   return to_jsonb(listing);
 end
 $$;
+
+do $$
+declare
+  migrated_listing record;
+begin
+  for migrated_listing in
+    update public.listings as listing
+    set status='live',approved_by=listing.created_by,
+      publish_at=coalesce(listing.publish_at,now())
+    from public.staff_profiles as staff,public.sale_authorizations as sale_auth
+    where listing.status='pending_approval'
+      and staff.user_id=listing.created_by
+      and staff.security_level=4
+      and staff.is_active
+      and sale_auth.id=listing.sale_authorization_id
+      and sale_auth.asset_id=listing.asset_id
+      and sale_auth.status='approved'
+    returning listing.id,listing.asset_id,listing.created_by
+  loop
+    update public.collateral_assets
+    set status='listed'
+    where id=migrated_listing.asset_id;
+
+    update public.approval_requests
+    set status='cancelled',decided_at=now(),
+      decision_reason='Automatically published under the Level 4 listing policy migration'
+    where action_type='publish_listing'
+      and entity_type='listing'
+      and entity_id=migrated_listing.id
+      and status='pending';
+
+    perform private.log_event(
+      'listing.published','listing',migrated_listing.id::text,
+      jsonb_build_object('status','pending_approval'),
+      jsonb_build_object('status','live','approved_by',migrated_listing.created_by),
+      'Automatically published an existing Level 4 listing with approved sale authorization'
+    );
+  end loop;
+end
+$$;
