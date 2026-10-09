@@ -308,6 +308,8 @@ export default function Marketplace({
   demo: boolean;
   browse?: boolean;
 }) {
+  const [listings, setListings] = useState(initial);
+  const [isDemo, setIsDemo] = useState(demo);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All assets");
   useCatalogTools((q,c)=>{setQuery(q);setCategory(c);document.getElementById("catalogue")?.scrollIntoView({behavior:"smooth"});});
@@ -317,10 +319,34 @@ export default function Marketplace({
   const [condition, setCondition] = useState("all");
   const [max, setMax] = useState("");
   useEffect(() => {
+    let active = true;
+    const refresh = async () => {
+      try {
+        const response = await fetch("/api/catalog", { cache: "no-store" });
+        if (!response.ok) return;
+        const data: { listings?: Listing[]; demo?: boolean } =
+          await response.json();
+        if (active && Array.isArray(data.listings)) {
+          setListings(data.listings);
+          setIsDemo(data.demo === true);
+        }
+      } catch {}
+    };
+    const onFocus = () => void refresh();
+    void refresh();
+    const timer = window.setInterval(refresh, 15000);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
+  useEffect(() => {
     const m = new URLSearchParams(locationSearch()).get("method");
     if (m) setMethod(m);
   }, []);
-  const filtered = initial
+  const filtered = listings
     .filter(
       (i) =>
         (category === "All assets" || i.category === category) &&
@@ -351,7 +377,7 @@ export default function Marketplace({
         onSaleMethodChange={setMethod}
       />
       <main>
-        {!browse && initial.length > 0 ? (
+        {!browse && listings.length > 0 ? (
           <section className="hero">
             <div className="hero-content">
               <div className="hero-kicker">
@@ -404,26 +430,26 @@ export default function Marketplace({
                 FEATURED LISTING
               </div>
               <img
-                src={initial[0].image}
-                alt={initial[0].title}
+                src={listings[0].image}
+                alt={listings[0].title}
               />
               <div className="hero-asset-caption">
                 <div>
                   <span>
-                    {initial[0].category.toUpperCase()} · {initial[0].location.toUpperCase()}
+                    {listings[0].category.toUpperCase()} · {listings[0].location.toUpperCase()}
                   </span>
-                  <h2>{initial[0].title}</h2>
+                  <h2>{listings[0].title}</h2>
                 </div>
                 <Link
-                  href={"/listing/" + initial[0].slug}
-                  aria-label={"View " + initial[0].title}
+                  href={"/listing/" + listings[0].slug}
+                  aria-label={"View " + listings[0].title}
                 >
                   <ArrowUpRight />
                 </Link>
               </div>
               <div className="float-label">
                 <span className="status-dot" />
-                {methodName(initial[0].method)} <b>{money(initial[0].price)}</b>
+                {methodName(listings[0].method)} <b>{money(listings[0].price)}</b>
               </div>
             </div>
           </section>
@@ -495,7 +521,7 @@ export default function Marketplace({
               >
                 Live auctions{" "}
                 <span>
-                  {initial.filter((i) => i.method.includes("auction")).length}
+                  {listings.filter((i) => i.method.includes("auction")).length}
                 </span>
               </button>
               <button
@@ -575,7 +601,7 @@ export default function Marketplace({
             {filtered.length} assets available{" "}
             <span>All prices in Malawi kwacha (MWK)</span>
           </div>
-          {demo && <DemoNotice />}
+          {isDemo && <DemoNotice />}
           <div className="asset-grid">
             {filtered.map((i) => (
               <AssetCard item={i} key={i.id} />
@@ -584,13 +610,13 @@ export default function Marketplace({
           {!filtered.length && (
             <div className="empty-state">
               <Search size={30} />
-              <h3>{initial.length ? "No matching assets" : "No assets listed yet"}</h3>
+              <h3>{listings.length ? "No matching assets" : "No assets listed yet"}</h3>
               <p>
-                {initial.length
+                {listings.length
                   ? "Try another category or a broader search."
                   : "Approved listings will appear here when they are available."}
               </p>
-              {!!initial.length && (
+              {!!listings.length && (
                 <button
                   className="btn secondary"
                   onClick={() => {

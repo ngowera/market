@@ -144,7 +144,9 @@ export default function Admin({ connected }: { connected: boolean }) {
           ? `Cash collection code: ${d.release_code}. Verify the collector before handover.`
           : d.order_no
             ? `Cash sale recorded as ${d.order_no}. The item is sold; request collection approval before handover.`
-            : d.message || "Action recorded successfully.",
+              : path === "listing"
+                ? "Listing submitted for independent approval. It will appear on the public website automatically once approved."
+                : d.message || "Action recorded successfully.",
       );
       setModal("");
       setPending(null);
