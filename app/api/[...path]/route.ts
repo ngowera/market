@@ -144,7 +144,6 @@ async function get(request: Request, path: string) {
       "approval_requests",
       "orders",
       "settlements",
-      "audit_events",
       "system_settings",
     ];
     if (staff.security_level >= 2)
@@ -159,9 +158,12 @@ async function get(request: Request, path: string) {
       assets: d.collateral_assets || d.public_catalog,
       authorizations: d.sale_authorizations || [],
       approvals: d.approval_requests,
-      orders: d.orders,
+      orders: (d.orders || []).map((order: any) => ({
+        ...order,
+        public_title: d.public_catalog.find((listing: any) => listing.id === order.listing_id)?.title || "—",
+      })),
       settlements: d.settlements,
-      audit: d.audit_events,
+      logs: await rpc("admin_audit_log", {}, token),
       staff: d.staff_profiles,
       offers: d.offers,
       settings: d.system_settings,
@@ -522,10 +524,34 @@ async function post(request: Request, path: string) {
     const action = path.slice(6);
     const min = ["staff", "settings", "fee-rule"].includes(action)
       ? 4
-      : ["approve", "offer", "settlement"].includes(action)
+      : ["approve", "offer", "settlement", "cash-sale"].includes(action)
         ? 3
         : 2;
     const { staff } = await staffUser(request, min);
+    if (action === "cash-sale") {
+      const d = z
+        .object({
+          listing_id: uuid,
+          receipt_ref: z.string().trim().min(1).max(100),
+          buyer_name: z.string().trim().min(1).max(120),
+          buyer_contact: z.string().trim().max(100).optional().default(""),
+          reason: z.string().trim().min(3).max(500),
+        })
+        .parse(b);
+      return json(
+        await rpc(
+          "record_cash_sale",
+          {
+            p_listing: d.listing_id,
+            p_receipt_ref: d.receipt_ref,
+            p_buyer_name: d.buyer_name,
+            p_buyer_contact: d.buyer_contact,
+            p_reason: d.reason,
+          },
+          token,
+        ),
+      );
+    }
     if (action === "asset")
       return json(await rpc("create_asset", { p_values: b }, token));
     if (action === "listing")

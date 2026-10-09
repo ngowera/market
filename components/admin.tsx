@@ -85,7 +85,7 @@ const navigation = [
   ["Release desk", PackageCheck],
   ["Settlements", Scale],
   ["Reports", BarChart3],
-  ["Audit explorer", ScrollText],
+  ["Logs", ScrollText],
   ["Users & security", Users],
   ["Configuration", Settings],
 ] as const;
@@ -138,7 +138,13 @@ export default function Admin({ connected }: { connected: boolean }) {
       });
       const d: any = await r.json();
       if (!r.ok) throw Error(d.error);
-      setSuccess(d.message || "Action recorded successfully.");
+      setSuccess(
+        d.release_code
+          ? `Cash collection code: ${d.release_code}. Verify the collector before handover.`
+          : d.order_no
+            ? `Cash sale recorded as ${d.order_no}. The item is sold; request collection approval before handover.`
+            : d.message || "Action recorded successfully.",
+      );
       setModal("");
       setPending(null);
     } catch (e) {
@@ -154,8 +160,8 @@ export default function Admin({ connected }: { connected: boolean }) {
   }
   function exportCsv() {
     const rows =
-      view === "Audit explorer"
-        ? records.audit || []
+      view === "Logs"
+        ? records.logs || []
         : view === "Orders & payments"
           ? orders
           : assets;
@@ -179,6 +185,26 @@ export default function Admin({ connected }: { connected: boolean }) {
     URL.revokeObjectURL(a.href);
     write("export", { report: view });
   }
+  if (!connected)
+    return (
+      <>
+        <header className="public-header">
+          <Brand />
+          <Link className="btn secondary" href="/">
+            Browse marketplace
+          </Link>
+        </header>
+        <div className="auth-layout">
+          <div className="auth-panel">
+            <h2>Staff sign-in unavailable here</h2>
+            <p>
+              GitHub Pages is a read-only preview. Staff sign-in requires the
+              server-backed admin app.
+            </p>
+          </div>
+        </div>
+      </>
+    );
   if (!staff)
     return (
       <>
@@ -246,10 +272,10 @@ export default function Admin({ connected }: { connected: boolean }) {
             })}
           </SidebarMenu>
           <div className="admin-sidebar-bottom">
-            <Link href="/">
-              <ArrowUpRight size={15} />
-              Go to marketplace
-            </Link>
+            <button className="text-button" onClick={() => setView("Logs")}>
+              <ScrollText size={15} />
+              Logs
+            </button>
             <p style={{ fontSize: 9, marginTop: 25, lineHeight: 1.8 }}>
               nyasamarket.com · Malawi
               <br />
@@ -307,7 +333,7 @@ export default function Admin({ connected }: { connected: boolean }) {
                   {view === "Collateral" ? "Add collateral" : "Create listing"}
                 </button>
               )}
-              {["Reports", "Audit explorer"].includes(view) && (
+                {["Reports", "Logs"].includes(view) && (
                 <button className="btn secondary" onClick={exportCsv}>
                   <Download size={14} />
                   Export CSV
@@ -490,6 +516,11 @@ export default function Admin({ connected }: { connected: boolean }) {
                     (view !== "Auctions" || r.method.includes("auction")),
                 )}
                 onOpen={(r) => open("asset-detail", r)}
+                onCashSale={
+                  view === "Listings" && level >= 3
+                    ? (r) => open("cash-sale", r)
+                    : undefined
+                }
               />
             </div>
           )}
@@ -567,6 +598,8 @@ export default function Admin({ connected }: { connected: boolean }) {
               columns={[
                 "order_no",
                 "public_title",
+                "buyer_name",
+                "payment_method",
                 "amount_due",
                 "status",
                 "tx_ref",
@@ -634,7 +667,7 @@ export default function Admin({ connected }: { connected: boolean }) {
               />
             </>
           )}
-          {view === "Audit explorer" && (
+          {view === "Logs" && (
             <>
               <div className="admin-table-tools">
                 <label className="search-field">
@@ -652,14 +685,17 @@ export default function Admin({ connected }: { connected: boolean }) {
                 </span>
               </div>
               <DataPanel
-                rows={(records.audit || []).filter((a: any) =>
+                rows={(records.logs || []).filter((a: any) =>
                   JSON.stringify(a).toLowerCase().includes(query.toLowerCase()),
                 )}
                 columns={[
                   "occurred_at",
                   "actor",
+                  "actor_level",
                   "action",
+                  "entity_type",
                   "entity_id",
+                  "reason",
                   "source",
                 ]}
                 onOpen={(r) => open("audit", r)}
@@ -906,6 +942,41 @@ export default function Admin({ connected }: { connected: boolean }) {
                 </button>
               </div>
             </>
+          ) : modal === "cash-sale" ? (
+            <form
+              className="form-grid"
+              onSubmit={(event) => {
+                event.preventDefault();
+                write("cash-sale", {
+                  listing_id: selected.id,
+                  ...Object.fromEntries(new FormData(event.currentTarget)),
+                });
+              }}
+            >
+              <p>
+                Record the full listed price ({money(selected?.price)}). This
+                marks the item sold; collection still requires separate approval.
+              </p>
+              <label>
+                Cash receipt reference
+                <input name="receipt_ref" maxLength={100} required />
+              </label>
+              <label>
+                Buyer name
+                <input name="buyer_name" maxLength={120} required />
+              </label>
+              <label>
+                Buyer contact (optional)
+                <input name="buyer_contact" maxLength={100} />
+              </label>
+              <label>
+                Sale note
+                <textarea name="reason" minLength={3} maxLength={500} required />
+              </label>
+              <button className="btn primary" disabled={busy}>
+                {busy ? "Recording cash sale…" : "Record cash sale"}
+              </button>
+            </form>
           ) : [
               "asset",
               "listing",
@@ -1098,7 +1169,7 @@ const descriptions: Record<string, string> = {
     "Verified payment, approved collection and accountable handover.",
   Settlements: "Explain every kwacha, from gross sale to loan recovery.",
   Reports: "Operational and financial reporting for your institution.",
-  "Audit explorer": "A permanent trail of sensitive actions and decisions.",
+  Logs: "A permanent, named trail of staff actions and decisions.",
   "Users & security": "Named staff accounts with four levels of authority.",
   Configuration: "Versioned policies, fee rules and integrations.",
 };
@@ -1126,9 +1197,11 @@ function Empty({ text }: { text: string }) {
 function AssetsTable({
   rows,
   onOpen,
+  onCashSale,
 }: {
   rows: any[];
   onOpen: (r: any) => void;
+  onCashSale?: (r: any) => void;
 }) {
   return (
     <div className="data-table-wrap">
@@ -1164,6 +1237,15 @@ function AssetsTable({
                 <Status status={r.status} />
               </TableCell>
               <TableCell>
+                {onCashSale && r.status === "live" && !r.method?.includes("auction") && (
+                  <button
+                    className="table-actions"
+                    style={{ marginRight: 10 }}
+                    onClick={() => onCashSale(r)}
+                  >
+                    Record cash
+                  </button>
+                )}
                 <button className="table-actions" onClick={() => onOpen(r)}>
                   Review <ArrowUpRight size={14} />
                 </button>

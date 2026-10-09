@@ -10,6 +10,8 @@ For a new Supabase project, run [`setup.sql`](setup.sql) in **Supabase Dashboard
 
 Collateral can be linked to a synchronized loan or created as a standalone sale by leaving the external loan ID blank. Both kinds still require an approved sale authorization and independent listing approval. Standalone sale proceeds are recorded as owner surplus after approved fees; no loan recovery is generated.
 
+Level 3+ staff can record an in-person fixed-price cash sale with a receipt reference and buyer name. The transaction marks the item sold and records a balanced settlement and audit event; collection still follows the separate staff-approval process. Auctions and unapproved listings cannot be recorded as cash sales.
+
 ## First staff accounts
 
 Create two real users through Supabase Authentication or the website signup screen. Confirm their email addresses. Then edit and run the following SQL with their actual emails. Use separate people for maker/checker approvals.
