@@ -8,7 +8,7 @@ declare conflict_name text;
 begin
   perform pg_advisory_xact_lock(20261005,182742);
   if to_regclass('public.cmrp_installation') is not null then
-    if exists(select 1 from public.cmrp_installation where version='20261009290000_active_settings_policy.sql') then
+    if exists(select 1 from public.cmrp_installation where version='20261009300000_release_buyer_handover_reporting.sql') then
       raise notice 'CMRP already installed; no changes made'; return;
     end if;
     raise exception 'Different CMRP version installed. Use migrations instead.';
@@ -2180,11 +2180,58 @@ drop trigger if exists high_value_release_policy on public.approval_requests;
 create trigger high_value_release_policy
 before insert on public.approval_requests
 for each row execute function private.apply_high_value_release_policy();
+create or replace function public.admin_release_history()
+returns table(
+  order_id uuid,
+  buyer_name text,
+  buyer_email text,
+  buyer_contact text,
+  collector_name text,
+  collector_ref text,
+  handover_staff text,
+  release_status text,
+  released_at timestamptz
+)
+language plpgsql
+stable
+security definer
+set search_path=''
+as $$
+begin
+  perform private.require_staff(2);
+  return query
+  select
+    orders.id,
+    coalesce(
+      nullif(btrim(orders.buyer_name),''),
+      nullif(btrim(profiles.display_name),''),
+      nullif(btrim(buyers.email),''),
+      'Unknown buyer'
+    ),
+    buyers.email,
+    orders.buyer_contact,
+    releases.collector_name,
+    releases.collector_ref,
+    collector_staff.full_name,
+    coalesce(releases.status,'not_requested'),
+    releases.released_at
+  from public.orders orders
+  left join public.profiles profiles on profiles.user_id=orders.buyer_id
+  left join auth.users buyers on buyers.id=orders.buyer_id
+  left join public.release_orders releases on releases.order_id=orders.id
+  left join public.staff_profiles collector_staff on collector_staff.user_id=releases.released_by
+  where orders.status in ('paid','released')
+  order by coalesce(releases.released_at,orders.paid_at,orders.created_at) desc;
+end
+$$;
+
+revoke all on function public.admin_release_history() from public,anon;
+grant execute on function public.admin_release_history() to authenticated;
 $cmrp_schema$;
   create table public.cmrp_installation(version text primary key,installed_at timestamptz not null default now());
   alter table public.cmrp_installation enable row level security;
   revoke all on public.cmrp_installation from public,anon,authenticated;
-  insert into public.cmrp_installation(version) values('20261009290000_active_settings_policy.sql');
+  insert into public.cmrp_installation(version) values('20261009300000_release_buyer_handover_reporting.sql');
 end
 $cmrp_installer$;
 notify pgrst, 'reload schema';

@@ -781,19 +781,21 @@ export default function Admin({ connected }: { connected: boolean }) {
                 <p className="account-stat">
                   Only paid orders are eligible. A release needs independent
                   approval, collector identity confirmation and a single-use
-                  code.
+                  code. The code currently arrives in the buyer’s account notification, not by SMS.
                 </p>
               </div>
               <DataPanel
-                rows={orders.filter((o: any) => o.status === "paid").map((order: any) => ({
+                rows={orders.filter((o: any) => ["paid", "released"].includes(o.status)).map((order: any) => ({
                   ...order,
-                  release_status: order.release_record?.status === "approved"
-                    ? "ready_for_handover"
-                    : order.release_approval
-                      ? "pending_approval"
-                      : "approval_required",
+                  release_status: order.release_record?.status === "released"
+                    ? "released"
+                    : order.release_record?.status === "approved"
+                      ? "ready_for_handover"
+                      : order.release_approval
+                        ? "pending_approval"
+                        : "approval_required",
                 }))}
-                columns={["order_no", "public_title", "amount_due", "release_status", "status"]}
+                columns={["order_no", "public_title", "buyer_name", "collector_name", "handover_staff", "amount_due", "release_status", "status"]}
                 onOpen={(r) => open("release", r)}
               />
             </>
@@ -1343,7 +1345,20 @@ export default function Admin({ connected }: { connected: boolean }) {
               <p className="account-stat">
                 Payment verified: {money(selected?.amount_due || 0)}. Verify the named collector and their identity before handing over the asset.
               </p>
-              {selected?.release_record?.status === "approved" ? (
+              <div className="spec-list release-parties">
+                <div><span>Buyer</span><b>{selected?.buyer_name || "Buyer account"}</b></div>
+                {selected?.buyer_email && <div><span>Buyer email</span><b>{selected.buyer_email}</b></div>}
+                {selected?.buyer_contact && <div><span>Buyer contact</span><b>{selected.buyer_contact}</b></div>}
+                {selected?.collector_name && <div><span>Approved collector</span><b>{selected.collector_name}</b></div>}
+                {selected?.collector_ref && <div><span>Collector identity</span><b>{selected.collector_ref}</b></div>}
+                {selected?.handover_staff && <div><span>Handover recorded by</span><b>{selected.handover_staff}</b></div>}
+                {selected?.released_at && <div><span>Handover completed</span><b>{new Date(selected.released_at).toLocaleString()}</b></div>}
+              </div>
+              {selected?.release_record?.status === "released" ? (
+                <p className="release-state-note" role="status">
+                  <PackageCheck size={18} /> Handover completed and recorded. The buyer and collector details above are retained in the audit history.
+                </p>
+              ) : selected?.release_record?.status === "approved" ? (
                 <form
                   className="form-grid"
                   onSubmit={(event) => {

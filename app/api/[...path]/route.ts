@@ -159,7 +159,6 @@ async function get(request: Request, path: string) {
     const { staff, token } = await staffUser(request);
     const names = [
       "public_catalog",
-      "approval_requests",
       "orders",
       "settlements",
       "system_settings",
@@ -273,6 +272,12 @@ async function get(request: Request, path: string) {
       { issue: "Paid, awaiting handover", count: (d.orders || []).filter((order: any) => order.status === "paid").length },
     ];
     const metrics = await rpc("dashboard_metrics", {}, token);
+    const releaseHistory = staff.security_level >= 2
+      ? await rpc("admin_release_history", {}, token)
+      : [];
+    const releaseHistoryByOrder = new Map(
+      (Array.isArray(releaseHistory) ? releaseHistory : []).map((record: any) => [record.order_id, record]),
+    );
     if (staff.security_level >= 2 && d.collateral_assets) {
       const media = await sb(
         "/rest/v1/asset_media?media_type=eq.public_image&select=asset_id,storage_path,sort_order&order=sort_order.asc&limit=500",
@@ -302,12 +307,24 @@ async function get(request: Request, path: string) {
       asset_listings: d.listings || [],
       authorizations: d.sale_authorizations || [],
       approvals: d.approval_requests,
-      orders: (d.orders || []).map((order: any) => ({
-        ...order,
-        public_title: d.public_catalog.find((listing: any) => listing.id === order.listing_id)?.title || "—",
-        release_record: releaseByOrder.get(order.id) || null,
-        release_approval: pendingReleaseByOrder.get(order.id) || null,
-      })),
+      orders: (d.orders || []).map((order: any) => {
+        const history: any = releaseHistoryByOrder.get(order.id) || {};
+        const releaseRecord: any = releaseByOrder.get(order.id) || null;
+        return {
+          ...order,
+          public_title: d.public_catalog.find((listing: any) => listing.id === order.listing_id)?.title || "—",
+          buyer_name: history.buyer_name || order.buyer_name || "Buyer account",
+          buyer_email: history.buyer_email || "",
+          buyer_contact: history.buyer_contact || order.buyer_contact || "",
+          collector_name: history.collector_name || null,
+          collector_ref: history.collector_ref || null,
+          handover_staff: history.handover_staff || null,
+          release_status: history.release_status || releaseRecord?.status || "not_requested",
+          released_at: history.released_at || null,
+          release_record: releaseRecord,
+          release_approval: pendingReleaseByOrder.get(order.id) || null,
+        };
+      }),
       settlements: d.settlements,
       reportData: {
         recovery: Array.isArray(metrics.chart) ? metrics.chart : [],
