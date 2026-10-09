@@ -11,7 +11,9 @@ npm ci
 npm run dev
 ```
 
-Open http://localhost:3000 for the marketplace and http://localhost:3000/admin for the staff portal. Both are one Next-compatible TypeScript application, using Vinext for Cloudflare-compatible hosting. All backend requests use the shared Supabase project. `ADMIN_HOST` optionally rewrites the root of a configured admin subdomain to `/admin`.
+The production frontend is published to GitHub Pages and its dynamic account, marketplace, and staff APIs run as Supabase Edge Functions. The Pages workflow builds and deploys both parts through GitHub Actions. Local development can still use `npm run dev`; backend requests use the shared Supabase project.
+
+GitHub Pages publishes the frontend; GitHub Actions deploys the dynamic API as a Supabase Edge Function. Set repository Actions variables `SUPABASE_PROJECT_REF` and `SUPABASE_PUBLISHABLE_KEY`, plus secret `SUPABASE_ACCESS_TOKEN`. The publishable key is public and included in the browser bundle; never use the service-role key there. The Pages workflow publishes the site and deploys `supabase/functions/api`; it also configures the allowed GitHub Pages origin and callback URL. Configure optional payment and loan integration secrets in Supabase Function Secrets, not in the frontend or Pages build. The Pages admin sign-in uses a tab-scoped bearer session because the API is hosted on a different origin.
 
 The workspace includes `.env`. Your Supabase URL is filled in; add `SUPABASE_ANON_KEY` (or `SUPABASE_PUBLISHABLE_KEY`). Until that key is present, the application shows a clearly marked sample catalogue and read-only sample admin workspace. Sample records are never used by financial endpoints. `.env` and `.env.local` are ignored by Git.
 
@@ -40,6 +42,7 @@ The workspace includes `.env`. Your Supabase URL is filled in; add `SUPABASE_ANO
 npm test
 npm run typecheck
 npm run build
+deno check --config supabase/functions/api/deno.json supabase/functions/api/index.ts
 ```
 
 The PostgreSQL suite uses PGlite with mocked Supabase `auth` and `storage` schemas. It executes the actual migration and checks private-data denial, unauthorized writes, staff levels, MFA, maker-checker, hidden drafts, bids/minimums/late-close rules, anti-sniping, winner idempotency, payment amount matching, settlement balance, outbox creation and single-use release. Unit tests check exact money arithmetic and webhook authentication.

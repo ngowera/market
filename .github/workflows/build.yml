@@ -17,9 +17,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      CLOUDFLARE_CF_FETCH_ENABLED: 'false'
-      WRANGLER_SEND_METRICS: 'false'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v7
@@ -32,12 +29,14 @@ jobs:
         run: npm test
       - name: Check TypeScript
         run: npm run typecheck
-      - name: Build marketplace, admin and APIs
-        run: npm run build
-      - name: Upload deployable Worker build
-        uses: actions/upload-artifact@v4
+      - uses: denoland/setup-deno@v2
         with:
-          name: marketplace-worker-${{ github.sha }}
-          path: dist/
-          if-no-files-found: error
-          retention-days: 14
+          deno-version: v2.x
+      - name: Check Supabase Edge Function
+        run: deno check --config supabase/functions/api/deno.json supabase/functions/api/index.ts
+      - name: Build GitHub Pages frontend
+        run: npm run build
+        env:
+          PAGES_BASE_PATH: /market/
+          VITE_API_URL: ${{ vars.SUPABASE_PROJECT_REF && format('https://{0}.supabase.co/functions/v1/api', vars.SUPABASE_PROJECT_REF) }}
+          VITE_SUPABASE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}

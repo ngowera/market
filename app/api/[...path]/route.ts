@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
   config,
@@ -6,9 +5,10 @@ import {
   currentUser,
   staffUser,
   getPublicListings,
-} from "@/lib/server";
-import { minorUnits, validSignature } from "@/lib/domain";
-import { verifyPayment } from "@/lib/payments";
+  env,
+} from "../../../lib/server.ts";
+import { minorUnits, validSignature } from "../../../lib/domain.ts";
+import { verifyPayment } from "../../../lib/payments.ts";
 const uuid = z.string().uuid();
 const amount = z
   .union([z.string(), z.number()])
@@ -21,28 +21,46 @@ const amount = z
     }
   }, "Invalid amount");
 function json(d: any, status = 200) {
-  return NextResponse.json(d, {
+  return new Response(JSON.stringify(d), {
     status,
-    headers: { "Cache-Control": "no-store" },
+    headers: {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json; charset=utf-8",
+    },
   });
 }
-function cookie(res: NextResponse, token: string, refresh?: string) {
-  res.cookies.set("cmrp_session", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 3600,
-  });
+function cookie(res: Response, token: string, refresh?: string) {
+  const headers = new Headers(res.headers);
+  const secure = env("NODE_ENV") === "production" ? "; Secure" : "";
+  const options = `Path=/; HttpOnly; SameSite=Lax${secure}`;
+  headers.append(
+    "Set-Cookie",
+    `cmrp_session=${encodeURIComponent(token)}; ${options}; Max-Age=3600`,
+  );
   if (refresh)
-    res.cookies.set("cmrp_refresh", refresh, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 604800,
-    });
-  return res;
+    headers.append(
+      "Set-Cookie",
+      `cmrp_refresh=${encodeURIComponent(refresh)}; ${options}; Max-Age=604800`,
+    );
+  return new Response(res.body, { status: res.status, headers });
+}
+function sessionResponse(
+  request: Request,
+  body: Record<string, unknown>,
+  accessToken: string,
+  refreshToken?: string,
+) {
+  const edgeClient = request.headers.get("x-cmrp-api-client") === "edge";
+  return cookie(
+    json({
+      ...body,
+      ...(edgeClient
+        ? { access_token: accessToken, refresh_token: refreshToken }
+        : {}),
+    }),
+    accessToken,
+    refreshToken,
+  );
 }
 async function rpc(name: string, args: any, token?: string, service = false) {
   return sb(
@@ -202,11 +220,15 @@ async function post(request: Request, path: string) {
     !path.startsWith("jobs/") &&
     path !== "integration/collateral"
   ) {
-    if (origin && origin !== new URL(request.url).origin)
+    if (
+      origin &&
+      origin !== new URL(request.url).origin &&
+      origin !== env("ALLOWED_ORIGIN")
+    )
       return json({ error: "Cross-origin request rejected" }, 403);
   }
   if (path === "payments/webhook") {
-    const secret = process.env.PAYCHANGU_WEBHOOK_SECRET;
+    const secret = env("PAYCHANGU_WEBHOOK_SECRET");
     if (!secret) return json({ error: "Webhook not configured" }, 503);
     const raw = await request.text();
     if (raw.length > 65536) return json({ error: "Payload too large" }, 413);
@@ -322,7 +344,26 @@ async function post(request: Request, path: string) {
   if (Number(request.headers.get("content-length") || 0) > 65536)
     return json({ error: "Payload too large" }, 413);
   const b: any = await request.json().catch(() => ({}));
-  if(path==="auth/refresh"){const refresh=request.headers.get("cookie")?.split(";").map(s=>s.trim()).find(s=>s.startsWith("cmrp_refresh="))?.slice(13);if(!refresh)return json({error:"Please sign in."},401);const auth=await sb("/auth/v1/token?grant_type=refresh_token",{method:"POST",body:JSON.stringify({refresh_token:decodeURIComponent(refresh)})});return cookie(json({refreshed:true}),auth.access_token,auth.refresh_token)}
+  if (path === "auth/refresh") {
+    const cookieRefresh = request.headers
+      .get("cookie")
+      ?.split(";")
+      .map((s) => s.trim())
+      .find((s) => s.startsWith("cmrp_refresh="))
+      ?.slice(13);
+    const refresh = request.headers.get("x-cmrp-refresh-token") || cookieRefresh;
+    if (!refresh) return json({ error: "Please sign in." }, 401);
+    const auth = await sb("/auth/v1/token?grant_type=refresh_token", {
+      method: "POST",
+      body: JSON.stringify({ refresh_token: decodeURIComponent(refresh) }),
+    });
+    return sessionResponse(
+      request,
+      { refreshed: true },
+      auth.access_token,
+      auth.refresh_token,
+    );
+  }
   if (path === "auth/login") {
     const d = z
       .object({ email: z.string().email(), password: z.string().min(1) })
@@ -331,8 +372,9 @@ async function post(request: Request, path: string) {
       method: "POST",
       body: JSON.stringify(d),
     });
-    return cookie(
-      json({ user: auth.user }),
+    return sessionResponse(
+      request,
+      { user: auth.user },
       auth.access_token,
       auth.refresh_token,
     );
@@ -369,8 +411,14 @@ async function post(request: Request, path: string) {
       await sb("/auth/v1/logout", { method: "POST" }, token);
     } catch {}
     const r = json({ logged_out: true });
-    r.cookies.delete("cmrp_session");
-    r.cookies.delete("cmrp_refresh");
+    r.headers.append(
+      "Set-Cookie",
+      "cmrp_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax",
+    );
+    r.headers.append(
+      "Set-Cookie",
+      "cmrp_refresh=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax",
+    );
     return r;
   }
   if (path === "auth/mfa") {
@@ -390,17 +438,18 @@ async function post(request: Request, path: string) {
       },
       token,
     );
-    return cookie(
-      json({ verified: true }),
+    return sessionResponse(
+      request,
+      { verified: true },
       auth.access_token,
       auth.refresh_token,
     );
   }
   if (path.startsWith("jobs/")) {
     if (
-      !process.env.INTEGRATION_JOB_SECRET ||
+      !env("INTEGRATION_JOB_SECRET") ||
       request.headers.get("authorization") !==
-        "Bearer " + process.env.INTEGRATION_JOB_SECRET
+        "Bearer " + env("INTEGRATION_JOB_SECRET")
     )
       return json({ error: "Job authorization required" }, 401);
     if (path === "jobs/auctions")
@@ -429,9 +478,9 @@ async function post(request: Request, path: string) {
   }
   if (path === "integration/collateral") {
     if (
-      !process.env.INTEGRATION_JOB_SECRET ||
+      !env("INTEGRATION_JOB_SECRET") ||
       request.headers.get("authorization") !==
-        "Bearer " + process.env.INTEGRATION_JOB_SECRET
+        "Bearer " + env("INTEGRATION_JOB_SECRET")
     )
       return json({ error: "Integration authorization required" }, 401);
     const d = z
@@ -509,16 +558,17 @@ async function post(request: Request, path: string) {
   }
   if (path === "payments/checkout") {
     const id = uuid.parse(b.order_id);
-    if (!process.env.PAYCHANGU_SECRET_KEY)
+    const paymentSecret = env("PAYCHANGU_SECRET_KEY");
+    if (!paymentSecret)
       throw Error("PayChangu server secret is not configured.");
     const payment = await rpc("begin_payment", { p_order: id }, token);
     if(payment.checkout_url)return json({checkout_url:payment.checkout_url});
-    const app = process.env.APP_URL;
+    const app = env("APP_URL");
     if (!app) throw Error("APP_URL must be configured.");
     const r = await fetch("https://api.paychangu.com/payment", {
       method: "POST",
       headers: {
-        Authorization: "Bearer " + process.env.PAYCHANGU_SECRET_KEY,
+        Authorization: "Bearer " + paymentSecret,
         "Content-Type": "application/json",
         Accept: "application/json",
       },
@@ -716,7 +766,9 @@ async function post(request: Request, path: string) {
   return json({ error: "Endpoint not found" }, 404);
 }
 async function syncLoans() {
-  if (!process.env.LOAN_API_URL || !process.env.LOAN_API_TOKEN)
+  const loanApiUrl = env("LOAN_API_URL");
+  const loanApiToken = env("LOAN_API_TOKEN");
+  if (!loanApiUrl || !loanApiToken)
     throw Error("Loan integration is not configured.");
   const rows = await sb(
     "/rest/v1/integration_outbox?status=eq.pending&next_attempt_at=lte." +
@@ -730,11 +782,11 @@ async function syncLoans() {
   for (const row of rows) {
     try {
       const r = await fetch(
-        process.env.LOAN_API_URL + "/integration/recovery",
+        loanApiUrl + "/integration/recovery",
         {
           method: "POST",
           headers: {
-            Authorization: "Bearer " + process.env.LOAN_API_TOKEN,
+            Authorization: "Bearer " + loanApiToken,
             "Idempotency-Key": row.idempotency_key,
             "Content-Type": "application/json",
           },

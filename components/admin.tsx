@@ -197,10 +197,10 @@ export default function Admin({ connected }: { connected: boolean }) {
         </header>
         <div className="auth-layout">
           <div className="auth-panel">
-            <h2>Staff sign-in unavailable here</h2>
+            <h2>Staff sign-in isn't configured</h2>
             <p>
-              GitHub Pages is a read-only preview. Staff sign-in requires the
-              server-backed admin app.
+              Configure the SUPABASE_PROJECT_REF and SUPABASE_PUBLISHABLE_KEY
+              GitHub Actions variables, then deploy the Supabase API function.
             </p>
           </div>
         </div>

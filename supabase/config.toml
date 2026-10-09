@@ -1,0 +1,4 @@
+[functions.api]
+enabled = true
+verify_jwt = false
+import_map = "./functions/api/deno.json"

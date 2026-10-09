@@ -1,9 +1,25 @@
-import type { Listing } from "./catalog";
+import type { Listing } from "./catalog.ts";
+export function env(name: string) {
+  const runtime = globalThis as typeof globalThis & {
+    Deno?: { env?: { get: (key: string) => string | undefined } };
+    process?: { env?: Record<string, string | undefined> };
+  };
+  const deno = runtime.Deno;
+  if (deno?.env) {
+    try {
+      const value = deno.env.get(name);
+      if (value !== undefined) return value;
+    } catch {
+      // Deno only exposes environment variables explicitly granted to the function.
+    }
+  }
+  return runtime.process?.env?.[name];
+}
 export function config() {
   return {
-    url: process.env.SUPABASE_URL,
-    key: process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY,
-    secret: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    url: env("SUPABASE_URL"),
+    key: env("SUPABASE_PUBLISHABLE_KEY") || env("SUPABASE_ANON_KEY"),
+    secret: env("SUPABASE_SERVICE_ROLE_KEY"),
   };
 }
 export async function sb(
@@ -49,14 +65,18 @@ export async function getPublicListings(): Promise<{
 }
 export async function currentUser(request: Request) {
   const cookie = request.headers.get("cookie") || "";
-  const token = cookie
-    .split(";")
-    .map((s) => s.trim())
-    .find((s) => s.startsWith("cmrp_session="))
-    ?.slice(13);
+  const bearer = request.headers.get("authorization") || "";
+  const token = bearer.startsWith("Bearer ")
+    ? bearer.slice(7)
+    : cookie
+        .split(";")
+        .map((s) => s.trim())
+        .find((s) => s.startsWith("cmrp_session="))
+        ?.slice(13);
   if (!token) throw new Error("Please sign in to continue.");
-  const user = await sb("/auth/v1/user", {}, decodeURIComponent(token));
-  return { user, token: decodeURIComponent(token) };
+  const decoded = bearer.startsWith("Bearer ") ? token : decodeURIComponent(token);
+  const user = await sb("/auth/v1/user", {}, decoded);
+  return { user, token: decoded };
 }
 export async function staffUser(request: Request, min = 1) {
   const { user, token } = await currentUser(request);

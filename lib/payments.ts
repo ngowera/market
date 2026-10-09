@@ -1,7 +1,7 @@
-import { sb } from "./server";
-import { paymentMatches } from "./domain";
+import { env, sb } from "./server.ts";
+import { paymentMatches } from "./domain.ts";
 export async function verifyPayment(tx_ref: string) {
-  const secret = process.env.PAYCHANGU_SECRET_KEY;
+  const secret = env("PAYCHANGU_SECRET_KEY");
   if (!secret) throw new Error("PayChangu server secret is not configured.");
   const rows = await sb(
     "/rest/v1/payments?tx_ref=eq." + encodeURIComponent(tx_ref) + "&select=*",

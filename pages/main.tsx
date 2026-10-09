@@ -12,13 +12,48 @@ if (typeof window !== 'undefined') {
   const base = import.meta.env.BASE_URL.replace(/\/$/, '');
   const route = window.location.pathname.slice(base.length).replace(/\/$/, '') || '/';
   const hasLocalApi = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+  const apiUrl = import.meta.env.VITE_API_URL?.replace(/\/$/, '');
+  const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
 
   if (!hasLocalApi) {
     const originalFetch = window.fetch.bind(window);
-    window.fetch = (input, init) => {
+    window.fetch = async (input, init) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-      if (url.startsWith('/api/')) return Promise.resolve(new Response(JSON.stringify({error:'GitHub Pages is a read-only preview. Staff sign-in requires the server-backed admin app.'}), {status:503, headers:{'Content-Type':'application/json'}}));
-      return originalFetch(input, init);
+      if (!url.startsWith('/api/')) return originalFetch(input, init);
+      if (!apiUrl || !supabaseKey)
+        return new Response(JSON.stringify({ error: 'The Supabase API endpoint and publishable key are not configured for this deployment.' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+      const path = url.slice('/api/'.length);
+      const headers = new Headers(input instanceof Request ? input.headers : undefined);
+      new Headers(init?.headers).forEach((value, key) => headers.set(key, value));
+      headers.set('x-cmrp-api-client', 'edge');
+      headers.set('apikey', supabaseKey);
+      const accessToken = sessionStorage.getItem('cmrp_access_token');
+      if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
+      if (path === 'auth/refresh') {
+        const refreshToken = sessionStorage.getItem('cmrp_refresh_token');
+        if (refreshToken) headers.set('x-cmrp-refresh-token', refreshToken);
+      }
+
+      const response = await originalFetch(`${apiUrl}/${path}`, {
+        ...init,
+        headers,
+        credentials: 'omit',
+      });
+      if (response.ok && ['auth/login', 'auth/mfa', 'auth/refresh'].includes(path)) {
+        const tokens: { access_token?: string; refresh_token?: string } =
+          await response.clone().json();
+        if (tokens.access_token) sessionStorage.setItem('cmrp_access_token', tokens.access_token);
+        if (tokens.refresh_token) sessionStorage.setItem('cmrp_refresh_token', tokens.refresh_token);
+      }
+      if (path === 'auth/logout' && response.ok) {
+        sessionStorage.removeItem('cmrp_access_token');
+        sessionStorage.removeItem('cmrp_refresh_token');
+      }
+      return response;
     };
   }
 
@@ -28,7 +63,7 @@ if (typeof window !== 'undefined') {
     '/help/terms': <TermsHelp />,
     '/help/privacy-and-complaints': <PrivacyHelp />,
   };
-  const content = route === '/admin' ? <Admin connected={hasLocalApi}/> : helpPages[route] ?? (route === '/' || route === '/browse' ? <Marketplace initial={[]} demo={false} browse={route === '/browse'}/> : <><Header/><main className="help-layout"><article><h1>Page not found</h1><p>Public browsing is read-only. Secure account and admin access are kept behind a separate portal.</p></article></main><Footer/></>);
+  const content = route === '/admin' ? <Admin connected={hasLocalApi || (!!apiUrl && !!supabaseKey)}/> : helpPages[route] ?? (route === '/' || route === '/browse' ? <Marketplace initial={[]} demo={false} browse={route === '/browse'}/> : <><Header/><main className="help-layout"><article><h1>Page not found</h1><p>Public browsing is read-only. Secure account and admin access are kept behind a separate portal.</p></article></main><Footer/></>);
   createRoot(document.getElementById('root')!).render(content);
 }
 
