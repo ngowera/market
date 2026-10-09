@@ -8,6 +8,7 @@ export type Listing = {
   location: string;
   condition: string;
   image: string;
+  images?: string[];
   ends_at?: string;
   bids: number;
   increment: number;

@@ -46,7 +46,12 @@ export default function ListingDetail({
   const [success, setSuccess] = useState("");
   const [accepted, setAccepted] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
+  const [activeImage, setActiveImage] = useState(initial.image);
   const auction = item.method.includes("auction");
+  const galleryImages = item.images?.length ? item.images : [item.image];
+  const displayedImage = galleryImages.includes(activeImage)
+    ? activeImage
+    : galleryImages[0];
   useEffect(() => {
     if (demo) return;
     const update = async () => {
@@ -122,8 +127,24 @@ export default function ListingDetail({
               onClick={() => setAction("zoom")}
               style={{ width: "100%", border: 0 }}
             >
-              <img src={item.image} alt={item.title} />
+              <img src={displayedImage} alt={item.title} />
             </button>
+            {galleryImages.length > 1 && (
+              <div className="detail-gallery" aria-label="Listing images">
+                {galleryImages.map((image, index) => (
+                  <button
+                    key={`${image}-${index}`}
+                    type="button"
+                    className={image === displayedImage ? "active" : ""}
+                    aria-label={`Show image ${index + 1} of ${galleryImages.length}`}
+                    aria-pressed={image === displayedImage}
+                    onClick={() => setActiveImage(image)}
+                  >
+                    <img src={image} alt="" />
+                  </button>
+                ))}
+              </div>
+            )}
             <p className="muted" style={{ fontSize: 10, marginTop: 10 }}>
               {demo
                 ? "Reference photo, not the actual collateral asset."
@@ -339,7 +360,7 @@ export default function ListingDetail({
           </DialogDescription>
           {action === "zoom" ? (
             <img
-              src={item.image}
+              src={displayedImage}
               alt={item.title}
               style={{ maxHeight: "65vh", objectFit: "contain" }}
             />

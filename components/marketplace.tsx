@@ -531,7 +531,7 @@ export default function Marketplace({
               <Pick
                 value={condition}
                 set={setCondition}
-                choices={["all", "Good", "Fair", "Excellent"]}
+                choices={["all", "New", "Excellent", "Good", "Fair"]}
                 label="Condition"
               />
               <input
@@ -558,7 +558,7 @@ export default function Marketplace({
               <Pick
                 value={condition}
                 set={setCondition}
-                choices={["all", "Good", "Fair", "Excellent"]}
+                choices={["all", "New", "Excellent", "Good", "Fair"]}
                 label="Condition"
               />
               <input

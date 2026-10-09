@@ -29,6 +29,7 @@ import {
   LogOut,
   Check,
   Link2,
+  X,
 } from "lucide-react";
 import {
   SidebarProvider,
@@ -517,6 +518,11 @@ export default function Admin({ connected }: { connected: boolean }) {
                     ? (r) => open("cash-sale", r)
                     : undefined
                 }
+                onChangePrice={
+                  view === "Listings" && level >= 2
+                    ? (r) => open("price-change", r)
+                    : undefined
+                }
               />
             </div>
           )}
@@ -534,7 +540,11 @@ export default function Admin({ connected }: { connected: boolean }) {
                       >
                         {a.status} · Level {a.required_min_level}+
                       </span>
-                      <h3>{a.public_title || a.action_type}</h3>
+                      <h3>
+                        {a.public_title ||
+                          a.proposed_values?.title ||
+                          a.action_type.replaceAll("_", " ")}
+                      </h3>
                       <p>
                         {a.reason}
                         <br />
@@ -911,7 +921,7 @@ export default function Admin({ connected }: { connected: boolean }) {
                       "category",
                       "custody_location",
                       "status",
-                      "condition",
+                      "condition_grade",
                       "valuation_amount",
                       "price",
                     ].includes(k),
@@ -919,7 +929,11 @@ export default function Admin({ connected }: { connected: boolean }) {
                   .map(([k, v]) => (
                     <div key={k}>
                       <span>{k.replaceAll("_", " ")}</span>
-                      <b>{String(v)}</b>
+                      <b>
+                        {k === "valuation_amount"
+                          ? formatValuation(String(v), selected?.currency)
+                          : String(v)}
+                      </b>
                     </div>
                   ))}
               </div>
@@ -938,6 +952,44 @@ export default function Admin({ connected }: { connected: boolean }) {
                 </button>
               </div>
             </>
+          ) : modal === "price-change" ? (
+            <form
+              className="form-grid"
+              onSubmit={(event) => {
+                event.preventDefault();
+                write("price-change", {
+                  listing_id: selected.id,
+                  ...Object.fromEntries(new FormData(event.currentTarget)),
+                });
+              }}
+            >
+              <p className="account-stat">
+                The change will take effect after an independent staff member approves it.
+                Auction starting bids can only change before the first bid.
+              </p>
+              <label>
+                {selected?.method?.includes("auction")
+                  ? selected?.method === "auction_plus_buy_now"
+                    ? "New starting bid and buy-now price (MWK)"
+                    : "New starting bid (MWK)"
+                  : "New direct-sale price (MWK)"}
+                <input
+                  name="price"
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  defaultValue={selected?.price || ""}
+                  required
+                />
+              </label>
+              <label>
+                Reason for change
+                <textarea name="reason" minLength={3} maxLength={500} required />
+              </label>
+              <button className="btn primary" disabled={busy}>
+                Request price change
+              </button>
+            </form>
           ) : modal === "cash-sale" ? (
             <form
               className="form-grid"
@@ -1175,6 +1227,7 @@ const modalTitle: Record<string, string> = {
   authorization: "Request sale authorization",
   staff: "Staff access request",
   "fee-rule": "Propose a fee rule",
+  "price-change": "Request listing price change",
   connection: "Connect your institution",
   release: "Confirm asset release",
   offer: "Review buyer offer",
@@ -1194,10 +1247,12 @@ function AssetsTable({
   rows,
   onOpen,
   onCashSale,
+  onChangePrice,
 }: {
   rows: any[];
   onOpen: (r: any) => void;
   onCashSale?: (r: any) => void;
+  onChangePrice?: (r: any) => void;
 }) {
   return (
     <div className="data-table-wrap">
@@ -1228,11 +1283,32 @@ function AssetsTable({
               </TableCell>
               <TableCell>{r.external_loan_id || r.asset_ref || "—"}</TableCell>
               <TableCell>{methodName(r.method || "fixed")}</TableCell>
-              <TableCell>{money(r.price || r.valuation_amount || 0)}</TableCell>
+              <TableCell>
+                {r.price != null
+                  ? money(r.price)
+                  : formatValuation(r.valuation_amount || 0, r.currency)}
+              </TableCell>
               <TableCell>
                 <Status status={r.status} />
               </TableCell>
               <TableCell>
+                {onChangePrice && r.status === "live" && (
+                  <button
+                    className="table-actions"
+                    style={{ marginRight: 10 }}
+                    disabled={r.method?.includes("auction") && Number(r.bids) > 0}
+                    title={
+                      r.method?.includes("auction") && Number(r.bids) > 0
+                        ? "Starting bid is locked after the first bid."
+                        : "Request an approved price change."
+                    }
+                    onClick={() => onChangePrice(r)}
+                  >
+                    {r.method?.includes("auction")
+                      ? "Change starting bid"
+                      : "Change price"}
+                  </button>
+                )}
                 {onCashSale && r.status === "live" && !r.method?.includes("auction") && (
                   <button
                     className="table-actions"
@@ -1328,9 +1404,26 @@ function DataPanel({
     </div>
   );
 }
-function NativePick({ name, values }: { name: string; values: string[] }) {
+function formatValuation(amount: number | string, currency = "MWK") {
+  const code = currency === "USD" ? "USD" : "MWK";
+  return new Intl.NumberFormat(code === "USD" ? "en-US" : "en-MW", {
+    style: "currency",
+    currency: code,
+    maximumFractionDigits: 2,
+  }).format(Number(amount));
+}
+
+function NativePick({
+  name,
+  values,
+  defaultValue,
+}: {
+  name: string;
+  values: string[];
+  defaultValue?: string;
+}) {
   return (
-    <Select name={name} defaultValue={values[0]}>
+    <Select name={name} defaultValue={defaultValue || values[0]}>
       <SelectTrigger style={{ width: "100%", marginTop: 8 }}>
         <SelectValue />
       </SelectTrigger>
@@ -1362,20 +1455,76 @@ function AdminForm({
   const [assetId, setAssetId] = useState(
     assets.some((asset) => asset.id === selected?.id) ? selected.id : "",
   );
-  const [imageUrl, setImageUrl] = useState(selected?.image || "");
+  const [saleMethod, setSaleMethod] = useState(selected?.method || "fixed_price");
+  const [photos, setPhotos] = useState<{ url: string; path: string }[]>(
+    type === "listing"
+      ? selected?.images || (selected?.image ? [{ url: selected.image, path: "" }] : [])
+      : [],
+  );
+  const [imageUrl, setImageUrl] = useState(photos[0]?.url || "");
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imageError, setImageError] = useState("");
   const matchingAuthorizations = authorizations.filter(
     (authorization) =>
       authorization.asset_id === assetId && authorization.status === "approved",
   );
+  async function uploadPhotos(input: HTMLInputElement, purpose: "asset" | "listing") {
+    const files = Array.from(input.files || []);
+    if (!files.length) return;
+    if (photos.length + files.length > 10) {
+      setImageError("You can add up to 10 images per asset.");
+      input.value = "";
+      return;
+    }
+    setImageError("");
+    setUploadingImage(true);
+    let firstUploaded = "";
+    try {
+      for (const file of files) {
+        const data = new FormData();
+        data.set("file", file);
+        data.set("purpose", purpose);
+        const response = await fetch("/api/admin/listing-image", {
+          method: "POST",
+          body: data,
+        });
+        const result: any = await response.json();
+        if (!response.ok) throw Error(result.error);
+        if (!firstUploaded) firstUploaded = result.image;
+        setPhotos((current) => [
+          ...current,
+          { url: result.image, path: result.storage_path },
+        ]);
+      }
+      if (purpose === "listing" && !imageUrl) setImageUrl(firstUploaded);
+    } catch (error) {
+      setImageError((error as Error).message);
+    } finally {
+      setUploadingImage(false);
+      input.value = "";
+    }
+  }
+  function removePhoto(index: number) {
+    const next = photos.filter((_, photoIndex) => photoIndex !== index);
+    setPhotos(next);
+    if (photos[index]?.url === imageUrl) setImageUrl(next[0]?.url || "");
+    setImageError("");
+  }
   return (
     <form
       className="form-grid"
       onSubmit={(e) => {
         e.preventDefault();
+        if (type === "asset" && !photos.some((photo) => photo.path.startsWith("assets/"))) {
+          setImageError("Upload at least one collateral image before saving.");
+          return;
+        }
+        const values = Object.fromEntries(new FormData(e.currentTarget));
         onSubmit({
-          ...Object.fromEntries(new FormData(e.currentTarget)),
+          ...values,
+          ...(type === "asset"
+            ? { image_paths: photos.map((photo) => photo.path).filter(Boolean) }
+            : { images: photos.map((photo) => photo.url), image: imageUrl }),
           entity_id: selected?.id,
         });
       }}
@@ -1389,9 +1538,45 @@ function AdminForm({
               placeholder="Leave blank for a standalone sale"
             />
           </label>
+          <p className="muted">
+            A unique asset reference is assigned automatically when the asset is saved.
+          </p>
           <label>
-            Asset reference
-            <input name="asset_ref" required />
+            Collateral images (select up to 10; JPEG, PNG or WebP, 5 MB each)
+            <input
+              type="file"
+              multiple
+              accept="image/jpeg,image/png,image/webp"
+              disabled={uploadingImage || busy}
+              onChange={(event) => uploadPhotos(event.currentTarget, "asset")}
+            />
+            {uploadingImage && <span className="muted">Uploading image…</span>}
+            {imageError && <span className="error">{imageError}</span>}
+            <div className="image-preview-list">
+              {photos.map((photo, index) => (
+                <div className="image-preview" key={photo.path || photo.url}>
+                  <img src={photo.url} alt={`Collateral image ${index + 1}`} />
+                <button
+                  type="button"
+                  className="image-preview-cancel"
+                    aria-label={`Remove collateral image ${index + 1}`}
+                  title="Remove image"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    removePhoto(index);
+                  }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              ))}
+            </div>
+            <input
+              type="hidden"
+              name="image_paths"
+              value={JSON.stringify(photos.map((photo) => photo.path).filter(Boolean))}
+            />
           </label>
           <label>
             Asset title
@@ -1413,24 +1598,40 @@ function AdminForm({
                 ]}
               />
             </label>
-            <label>
-              Valuation (MWK)
-              <input
-                type="number"
-                name="valuation_amount"
-                required
-                min="1"
-                step="0.01"
-              />
-            </label>
+            <div className="form-grid two">
+              <label>
+                Valuation amount
+                <input
+                  type="number"
+                  name="valuation_amount"
+                  required
+                  min="1"
+                  step="0.01"
+                />
+              </label>
+              <label>
+                Currency
+                <NativePick name="currency" values={["MWK", "USD"]} />
+              </label>
+            </div>
           </div>
           <label>
             Custody location
-            <input name="custody_location" required />
+            <input
+              name="custody_location"
+              placeholder="e.g. Blantyre branch, secured store"
+              required
+            />
+            <span className="muted">
+              Where the asset is physically held, such as a branch or warehouse.
+            </span>
           </label>
           <label>
-            Condition notes
-            <textarea name="condition_notes" required />
+            Condition
+            <NativePick
+              name="condition_grade"
+              values={["New", "Excellent", "Good", "Fair"]}
+            />
           </label>
         </>
       ) : type === "listing" ? (
@@ -1440,7 +1641,15 @@ function AdminForm({
             <select
               name="asset_id"
               value={assetId}
-              onChange={(event) => setAssetId(event.target.value)}
+              onChange={(event) => {
+                const nextAsset = assets.find(
+                  (asset) => asset.id === event.target.value,
+                );
+                setAssetId(event.target.value);
+                const nextPhotos = nextAsset?.images || (nextAsset?.image ? [{ url: nextAsset.image, path: "" }] : []);
+                setPhotos(nextPhotos);
+                setImageUrl(nextPhotos[0]?.url || "");
+              }}
               required
             >
               <option value="" disabled>
@@ -1483,42 +1692,50 @@ function AdminForm({
           </label>
           <label>
             Sale mode
-            <NativePick
-              name="method"
-              values={[
-                "fixed_price",
-                "auction",
-                "fixed_plus_offer",
-                "auction_plus_buy_now",
-              ]}
-            />
+            <Select name="method" value={saleMethod} onValueChange={setSaleMethod}>
+              <SelectTrigger style={{ width: "100%", marginTop: 8 }}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="fixed_price">Direct sale · Buy</SelectItem>
+                <SelectItem value="auction">Auction · bids</SelectItem>
+                <SelectItem value="fixed_plus_offer">Direct sale · Buy or offer</SelectItem>
+                <SelectItem value="auction_plus_buy_now">Auction · bids or buy now</SelectItem>
+              </SelectContent>
+            </Select>
           </label>
-          <div className="form-grid two">
+          <div className={saleMethod.includes("auction") ? "form-grid two" : "form-grid"}>
             <label>
-              Fixed price / starting bid (MWK)
+              {saleMethod.includes("auction")
+                ? "Starting bid (MWK)"
+                : "Direct-sale price (MWK)"}
               <input name="price" type="number" min="1" required step="0.01" />
             </label>
+            {saleMethod.includes("auction") && (
+              <label>
+                Minimum bid increment (MWK)
+                <input
+                  name="increment"
+                  type="number"
+                  min="1"
+                  defaultValue="10000"
+                  step="0.01"
+                />
+              </label>
+            )}
+          </div>
+          {saleMethod.includes("auction") && (
             <label>
-              Minimum increment (MWK)
+              Auction duration (hours)
               <input
-                name="increment"
                 type="number"
+                name="duration_hours"
                 min="1"
-                defaultValue="10000"
-                step="0.01"
+                max="720"
+                defaultValue="72"
               />
             </label>
-          </div>
-          <label>
-            Auction duration (hours)
-            <input
-              type="number"
-              name="duration_hours"
-              min="1"
-              max="720"
-              defaultValue="72"
-            />
-          </label>
+          )}
           <label>
             Collection point
             <input
@@ -1528,7 +1745,15 @@ function AdminForm({
             />
           </label>
           <label>
-            Public description
+            Condition
+            <NativePick
+              name="condition_grade"
+              values={["New", "Excellent", "Good", "Fair"]}
+              defaultValue={selected?.condition_grade || "Good"}
+            />
+          </label>
+          <label>
+            Description
             <textarea name="description" required />
           </label>
           <label>
@@ -1536,52 +1761,36 @@ function AdminForm({
             <textarea name="defects" required />
           </label>
           <label>
-            Upload listing photo (JPEG, PNG or WebP, up to 5 MB)
+            Listing images (select up to 10; JPEG, PNG or WebP, 5 MB each)
             <input
               type="file"
+              multiple
               accept="image/jpeg,image/png,image/webp"
               disabled={uploadingImage || busy}
-              onChange={async (event) => {
-                const input = event.currentTarget;
-                const file = input.files?.[0];
-                if (!file) return;
-                setImageError("");
-                setUploadingImage(true);
-                try {
-                  const data = new FormData();
-                  data.set("file", file);
-                  const response = await fetch("/api/admin/listing-image", {
-                    method: "POST",
-                    body: data,
-                  });
-                  const result: any = await response.json();
-                  if (!response.ok) throw Error(result.error);
-                  setImageUrl(result.image);
-                } catch (error) {
-                  setImageError((error as Error).message);
-                } finally {
-                  setUploadingImage(false);
-                  input.value = "";
-                }
-              }}
+              onChange={(event) => uploadPhotos(event.currentTarget, "listing")}
             />
             {uploadingImage && <span className="muted">Uploading image…</span>}
             {imageError && <span className="error">{imageError}</span>}
-            {imageUrl && (
-              <img
-                src={imageUrl}
-                alt="Selected listing"
-                style={{
-                  display: "block",
-                  width: 112,
-                  height: 84,
-                  marginTop: 8,
-                  objectFit: "contain",
-                  background: "#f3f6f6",
-                  borderRadius: 5,
-                }}
-              />
-            )}
+            <div className="image-preview-list">
+              {photos.map((photo, index) => (
+                <div className="image-preview" key={photo.path || photo.url}>
+                  <img src={photo.url} alt={`Listing image ${index + 1}`} />
+                <button
+                  type="button"
+                  className="image-preview-cancel"
+                    aria-label={`Remove listing image ${index + 1}`}
+                  title="Remove image"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    removePhoto(index);
+                  }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              ))}
+            </div>
           </label>
           <label>
             Image URL
@@ -1589,7 +1798,14 @@ function AdminForm({
               name="image"
               type="url"
               value={imageUrl}
-              onChange={(event) => setImageUrl(event.target.value)}
+              onChange={(event) => {
+                const value = event.target.value;
+                setImageUrl(value);
+                setPhotos((current) => [
+                  ...(value ? [{ url: value, path: "" }] : []),
+                  ...current.slice(1).filter((photo) => photo.url !== value),
+                ]);
+              }}
               required
             />
           </label>
@@ -1673,8 +1889,13 @@ function AdminForm({
         </>
       )}
       <label>
-        Reason
+        {type === "listing" ? "Approval reason" : "Reason"}
         <textarea name="reason" required />
+        {type === "listing" && (
+          <span className="muted">
+            Internal note for the approval record. The description above is shown publicly.
+          </span>
+        )}
       </label>
       <button className="btn primary" disabled={busy}>
         {busy ? "Submitting…" : "Save request"}

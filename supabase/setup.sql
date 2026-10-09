@@ -8,7 +8,7 @@ declare conflict_name text;
 begin
   perform pg_advisory_xact_lock(20261005,182742);
   if to_regclass('public.cmrp_installation') is not null then
-    if exists(select 1 from public.cmrp_installation where version='20261009203000_cash_sales_and_logs.sql') then
+    if exists(select 1 from public.cmrp_installation where version='20261009240000_listing_image_galleries.sql') then
       raise notice 'CMRP already installed; no changes made'; return;
     end if;
     raise exception 'Different CMRP version installed. Use migrations instead.';
@@ -1007,11 +1007,588 @@ begin
   return jsonb_build_object('status',p_decision,'release_code',cash_release_code);
 end
 $$;
+create or replace function private.create_asset(p_values jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path=''
+as $$
+declare
+  actor uuid;
+  loan uuid;
+  asset public.collateral_assets;
+begin
+  actor=private.require_staff(2);
+  if nullif(btrim(p_values->>'external_loan_id'),'') is not null then
+    select id into loan
+    from public.loans_bridge
+    where external_loan_id=btrim(p_values->>'external_loan_id');
+    if loan is null then
+      raise exception 'Loan not synchronized. Import via the loan bridge first.';
+    end if;
+  end if;
+
+  insert into public.collateral_assets(
+    loan_bridge_id,asset_ref,title,category,valuation_amount,currency,
+    custody_location,condition_grade,condition_notes,created_by
+  ) values(
+    loan,coalesce(
+      nullif(btrim(p_values->>'asset_ref'),''),
+      'COL-'||to_char(current_date,'YYYY')||'-'||
+        upper(substr(replace(gen_random_uuid()::text,'-',''),1,12))
+    ),p_values->>'title',p_values->>'category',
+    (p_values->>'valuation_amount')::numeric,
+    coalesce(nullif(p_values->>'currency',''),'MWK'),
+    p_values->>'custody_location',
+    coalesce(nullif(p_values->>'condition_grade',''),'Good'),
+    nullif(btrim(p_values->>'condition_notes'),''),actor
+  ) returning * into asset;
+
+  perform private.log_event(
+    'asset.created','asset',asset.id::text,null,to_jsonb(asset),p_values->>'reason'
+  );
+  return to_jsonb(asset);
+end
+$$;
+
+create or replace function private.create_listing(p_values jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path=''
+as $$
+declare
+  actor uuid;
+  listing public.listings;
+  authorization_row public.sale_authorizations;
+  request public.approval_requests;
+  config jsonb;
+begin
+  actor=private.require_staff(2);
+  select * into authorization_row
+  from public.sale_authorizations
+  where id=(p_values->>'sale_authorization_id')::uuid
+    and asset_id=(p_values->>'asset_id')::uuid;
+  if authorization_row.status<>'approved' or authorization_row.id is null then
+    raise exception 'Approved sale authorization required';
+  end if;
+
+  insert into public.listings(
+    asset_id,sale_authorization_id,slug,method,status,public_title,
+    public_description,fixed_price,collection_point,terms_version,image,
+    condition_grade,defects,created_by
+  ) values(
+    authorization_row.asset_id,authorization_row.id,p_values->>'slug',
+    (p_values->>'method')::public.sale_method,'pending_approval',
+    p_values->>'title',p_values->>'description',
+    case when p_values->>'method'='auction' then null
+      else (p_values->>'price')::numeric end,
+    p_values->>'collection_point',p_values->>'terms_version',p_values->>'image',
+    coalesce(nullif(p_values->>'condition_grade',''),'Good'),
+    p_values->>'defects',actor
+  ) returning * into listing;
+
+  if listing.method in ('auction','auction_plus_buy_now') then
+    select settings into config
+    from public.system_settings
+    order by created_at desc
+    limit 1;
+    insert into public.auctions(
+      listing_id,starts_at,ends_at,starting_bid,min_increment,
+      extension_window_seconds,extension_seconds,max_extension_count
+    ) values(
+      listing.id,now(),
+      now()+make_interval(hours=>(p_values->>'duration_hours')::integer),
+      (p_values->>'price')::numeric,(p_values->>'increment')::numeric,
+      (config->>'extension_window')::integer,
+      (config->>'extension_seconds')::integer,
+      (config->>'max_extensions')::integer
+    );
+  end if;
+
+  insert into public.approval_requests(
+    action_type,entity_type,entity_id,requested_by,required_min_level,
+    reason,proposed_values
+  ) values(
+    'publish_listing','listing',listing.id,actor,3,
+    p_values->>'reason',p_values
+  ) returning * into request;
+  perform private.log_event(
+    'listing.created','listing',listing.id::text,null,to_jsonb(listing)
+  );
+  return to_jsonb(listing);
+end
+$$;
+create or replace function private.request_change(p_action text,p_entity uuid,p_values jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path=''
+as $$
+declare
+  actor uuid;
+  request public.approval_requests;
+  required_level integer;
+  listing public.listings;
+  auction_row public.auctions;
+  values_to_save jsonb:=p_values;
+  requested_price numeric;
+  current_price numeric;
+begin
+  required_level=case when p_action in ('staff_change','settings_change','fee_change') then 4 else 3 end;
+  actor=private.require_staff(case when p_action in ('release','settlement','listing_price_change') then 2 else required_level end);
+  if p_action not in ('staff_change','settings_change','fee_change','settlement','release','listing_price_change') then
+    raise exception 'Unsupported change';
+  end if;
+  if p_action='release' and not exists(select 1 from public.orders where id=p_entity and status='paid') then
+    raise exception 'Verified paid payment required';
+  end if;
+  if p_action='settlement' and not exists(select 1 from public.settlements where id=p_entity and status='draft') then
+    raise exception 'Draft settlement required';
+  end if;
+
+  if p_action='listing_price_change' then
+    requested_price=(p_values->>'price')::numeric;
+    if requested_price is null or requested_price<=0
+       or requested_price<>round(requested_price,2)
+       or coalesce(length(trim(p_values->>'reason')),0)<3 then
+      raise exception 'A valid positive price and reason are required';
+    end if;
+    select * into listing from public.listings where id=p_entity for update;
+    if listing.id is null or listing.status<>'live' then
+      raise exception 'Only live listings can be repriced';
+    end if;
+    if exists(select 1 from public.approval_requests where action_type='listing_price_change' and entity_id=p_entity and status='pending') then
+      raise exception 'A price change is already awaiting approval';
+    end if;
+    if exists(select 1 from public.orders where listing_id=listing.id and status in ('awaiting_payment','paid','released','closed','disputed')) then
+      raise exception 'Price is locked after a purchase starts';
+    end if;
+    if listing.method in ('auction','auction_plus_buy_now') then
+      select * into auction_row from public.auctions where listing_id=listing.id for update;
+      if auction_row.listing_id is null or exists(select 1 from public.bids where auction_listing_id=listing.id) then
+        raise exception 'Starting bid is locked after bidding starts';
+      end if;
+      current_price=coalesce(auction_row.current_price,auction_row.starting_bid);
+    else
+      current_price=listing.fixed_price;
+    end if;
+    if current_price is null or requested_price=current_price then
+      raise exception 'Enter a different valid price';
+    end if;
+    values_to_save=p_values||jsonb_build_object(
+      'title',listing.public_title,
+      'method',listing.method::text,
+      'old_price',current_price
+    );
+  end if;
+
+  insert into public.approval_requests(
+    action_type,entity_type,entity_id,requested_by,required_min_level,
+    reason,proposed_values
+  ) values(
+    p_action,
+    case when p_action='listing_price_change' then 'listing' else p_action end,
+    p_entity,actor,required_level,
+    coalesce(p_values->>'reason','Operational review requested'),values_to_save
+  ) returning * into request;
+  perform private.log_event('approval.requested',request.entity_type,p_entity::text,null,to_jsonb(request));
+  return to_jsonb(request);
+end
+$$;
+
+create or replace function private.approve_action(p_request uuid,p_decision text,p_reason text)
+returns jsonb
+language plpgsql
+security definer
+set search_path=''
+as $$
+declare
+  actor uuid;
+  request public.approval_requests;
+  proposal jsonb;
+  settlement public.settlements;
+  order_row public.orders;
+  listing_row public.listings;
+  auction_row public.auctions;
+  authorization_row public.sale_authorizations;
+  total numeric;
+  token text;
+  cash_release_code text;
+begin
+  actor=private.require_staff(3);
+  select * into request from public.approval_requests where id=p_request for update;
+  if request.id is null or request.status<>'pending' or request.requested_by=actor
+     or private.staff_level()<request.required_min_level
+     or p_decision not in ('approved','rejected') or length(trim(p_reason))<3 then
+    raise exception 'Independent eligible approver and reason required';
+  end if;
+  proposal=request.proposed_values;
+
+  if p_decision='approved' then
+    case request.action_type
+      when 'sale_authorization' then
+        select * into authorization_row from public.sale_authorizations where id=request.entity_id for update;
+        update public.sale_authorizations set status='approved',decided_by=actor,decided_at=now(),decision_reason=p_reason where id=request.entity_id;
+        update public.collateral_assets set status='approved_for_sale' where id=authorization_row.asset_id;
+      when 'publish_listing' then
+        if not exists(select 1 from public.listings l join public.sale_authorizations a on a.id=l.sale_authorization_id and a.asset_id=l.asset_id where l.id=request.entity_id and l.status='pending_approval' and a.status='approved') then
+          raise exception 'Sale authorization required';
+        end if;
+        update public.listings set status='live',approved_by=actor,publish_at=now() where id=request.entity_id;
+        update public.collateral_assets set status='listed' where id=(select asset_id from public.listings where id=request.entity_id);
+      when 'listing_price_change' then
+        select * into listing_row from public.listings where id=request.entity_id for update;
+        if listing_row.id is null or listing_row.status<>'live'
+           or listing_row.method::text<>proposal->>'method' then
+          raise exception 'Listing changed or is no longer live';
+        end if;
+        if exists(select 1 from public.orders where listing_id=listing_row.id and status in ('awaiting_payment','paid','released','closed','disputed')) then
+          raise exception 'Price is locked after a purchase starts';
+        end if;
+        if listing_row.method in ('auction','auction_plus_buy_now') then
+          select * into auction_row from public.auctions where listing_id=listing_row.id for update;
+          if auction_row.listing_id is null or exists(select 1 from public.bids where auction_listing_id=listing_row.id) then
+            raise exception 'Starting bid is locked after bidding starts';
+          end if;
+          if coalesce(auction_row.current_price,auction_row.starting_bid)<>(proposal->>'old_price')::numeric then
+            raise exception 'Listing price changed since this request was submitted';
+          end if;
+          update public.auctions set starting_bid=(proposal->>'price')::numeric where listing_id=listing_row.id;
+          if listing_row.method='auction_plus_buy_now' then
+            update public.listings set fixed_price=(proposal->>'price')::numeric where id=listing_row.id;
+          end if;
+        else
+          if listing_row.fixed_price is null or listing_row.fixed_price<>(proposal->>'old_price')::numeric then
+            raise exception 'Listing price changed since this request was submitted';
+          end if;
+          update public.listings set fixed_price=(proposal->>'price')::numeric where id=listing_row.id;
+        end if;
+      when 'staff_change' then
+        insert into public.staff_profiles(user_id,full_name,security_level,is_active,mfa_required,created_by)
+        values((proposal->>'user_id')::uuid,proposal->>'full_name',(proposal->>'security_level')::smallint,(proposal->>'is_active')::boolean,(proposal->>'security_level')::integer>=3,actor)
+        on conflict(user_id) do update set full_name=excluded.full_name,security_level=excluded.security_level,is_active=excluded.is_active,mfa_required=excluded.mfa_required;
+      when 'settings_change' then
+        insert into public.system_settings(settings,approved_by) values(proposal,actor);
+      when 'fee_change' then
+        insert into public.fee_rules(version,platform_bps,fixed_fee,effective_at,approved_by,is_active)
+        values(proposal->>'version',(proposal->>'platform_bps')::integer,(proposal->>'fixed_fee')::numeric,(proposal->>'effective_at')::timestamptz,actor,true);
+      when 'settlement' then
+        select * into settlement from public.settlements where id=request.entity_id for update;
+        if settlement.status<>'draft' or not exists(select 1 from public.orders where id=settlement.order_id and status in ('paid','released')) then
+          raise exception 'Paid draft settlement required';
+        end if;
+        select sum(direction*amount) into total from public.settlement_lines where settlement_id=settlement.id and line_type<>'SHORTFALL';
+        if total<>0 or total is null then raise exception 'Settlement does not balance'; end if;
+        update public.settlements set status='approved',approved_by=actor,approved_at=now() where id=settlement.id;
+        insert into public.integration_outbox(settlement_id,payload)
+        select settlement.id,jsonb_build_object(
+          'external_loan_id',bridge.external_loan_id,
+          'marketplace_order_no',order_record.order_no,
+          'gross_sale',settlement.gross_sale,
+          'currency',settlement.currency,
+          'loan_recovery',(select amount from public.settlement_lines where settlement_id=settlement.id and line_type='RECOVERY_TO_LOAN'),
+          'surplus',(select amount from public.settlement_lines where settlement_id=settlement.id and line_type='OWNER_SURPLUS'),
+          'settled_at',now()
+        )
+        from public.orders order_record
+        join public.listings sale_listing on sale_listing.id=order_record.listing_id
+        join public.collateral_assets asset on asset.id=sale_listing.asset_id
+        join public.loans_bridge bridge on bridge.id=asset.loan_bridge_id
+        where order_record.id=settlement.order_id
+        on conflict(settlement_id) do nothing;
+      when 'release' then
+        select * into order_row from public.orders where id=request.entity_id for update;
+        if order_row.status<>'paid' then raise exception 'Verified payment required'; end if;
+        token=replace(gen_random_uuid()::text||gen_random_uuid()::text,'-','');
+        insert into public.release_orders(order_id,release_token_hash,status,approved_by,approved_at,prepared_by,collector_name,collector_ref)
+        values(order_row.id,encode(sha256(convert_to(token,'UTF8')),'hex'),'approved',actor,now(),request.requested_by,proposal->>'collector_name',proposal->>'collector_ref');
+        if order_row.buyer_id is not null then
+          insert into public.notifications(user_id,kind,message,entity_id)
+          values(order_row.buyer_id,'collection_ready','Your collection code: '||token,order_row.id);
+        else
+          cash_release_code=token;
+        end if;
+      else
+        raise exception 'Unsupported approval action';
+    end case;
+  end if;
+
+  update public.approval_requests set status=p_decision::public.approval_status,decided_by=actor,decided_at=now(),decision_reason=p_reason where id=request.id;
+  perform private.log_event('approval.'||p_decision,request.entity_type,request.entity_id::text,to_jsonb(request),jsonb_build_object('decision',p_decision),p_reason);
+  return jsonb_build_object('status',p_decision,'release_code',cash_release_code);
+end
+$$;
+create or replace function private.create_asset(p_values jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path=''
+as $$
+declare
+  actor uuid;
+  loan uuid;
+  asset public.collateral_assets;
+begin
+  actor=private.require_staff(2);
+  if nullif(btrim(p_values->>'external_loan_id'),'') is not null then
+    select id into loan
+    from public.loans_bridge
+    where external_loan_id=btrim(p_values->>'external_loan_id');
+    if loan is null then
+      raise exception 'Loan not synchronized. Import via the loan bridge first.';
+    end if;
+  end if;
+
+  insert into public.collateral_assets(
+    loan_bridge_id,asset_ref,title,category,valuation_amount,currency,
+    custody_location,condition_grade,condition_notes,created_by
+  ) values(
+    loan,coalesce(
+      nullif(btrim(p_values->>'asset_ref'),''),
+      'COL-'||to_char(current_date,'YYYY')||'-'||
+        upper(substr(replace(gen_random_uuid()::text,'-',''),1,12))
+    ),p_values->>'title',p_values->>'category',
+    (p_values->>'valuation_amount')::numeric,
+    coalesce(nullif(p_values->>'currency',''),'MWK'),
+    p_values->>'custody_location',
+    coalesce(nullif(p_values->>'condition_grade',''),'Good'),
+    nullif(btrim(p_values->>'condition_notes'),''),actor
+  ) returning * into asset;
+
+  if nullif(p_values->>'image_path','') is not null then
+    if p_values->>'image_path' not like 'assets/%' then
+      raise exception 'Invalid collateral image path';
+    end if;
+    insert into public.asset_media(asset_id,storage_path,media_type,sort_order,created_by)
+    values(asset.id,p_values->>'image_path','public_image',0,actor);
+  end if;
+
+  perform private.log_event(
+    'asset.created','asset',asset.id::text,null,to_jsonb(asset),p_values->>'reason'
+  );
+  return to_jsonb(asset);
+end
+$$;
+alter table public.listings
+  add column if not exists images text[] not null default '{}'::text[];
+alter table public.public_catalog
+  add column if not exists images text[] not null default '{}'::text[];
+
+update public.listings
+set images=array[image]
+where cardinality(images)=0 and nullif(image,'') is not null;
+update public.public_catalog
+set images=array[image]
+where cardinality(images)=0 and nullif(image,'') is not null;
+
+create unique index if not exists asset_media_asset_path_unique
+  on public.asset_media(asset_id,storage_path);
+
+create or replace function private.create_asset(p_values jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path=''
+as $$
+declare
+  actor uuid;
+  loan uuid;
+  asset public.collateral_assets;
+  image_paths jsonb;
+  image_record record;
+begin
+  actor=private.require_staff(2);
+  if nullif(btrim(p_values->>'external_loan_id'),'') is not null then
+    select id into loan
+    from public.loans_bridge
+    where external_loan_id=btrim(p_values->>'external_loan_id');
+    if loan is null then
+      raise exception 'Loan not synchronized. Import via the loan bridge first.';
+    end if;
+  end if;
+
+  insert into public.collateral_assets(
+    loan_bridge_id,asset_ref,title,category,valuation_amount,currency,
+    custody_location,condition_grade,condition_notes,created_by
+  ) values(
+    loan,coalesce(
+      nullif(btrim(p_values->>'asset_ref'),''),
+      'COL-'||to_char(current_date,'YYYY')||'-'||
+        upper(substr(replace(gen_random_uuid()::text,'-',''),1,12))
+    ),p_values->>'title',p_values->>'category',
+    (p_values->>'valuation_amount')::numeric,
+    coalesce(nullif(p_values->>'currency',''),'MWK'),
+    p_values->>'custody_location',
+    coalesce(nullif(p_values->>'condition_grade',''),'Good'),
+    nullif(btrim(p_values->>'condition_notes'),''),actor
+  ) returning * into asset;
+
+  image_paths=coalesce(
+    p_values->'image_paths',
+    case when nullif(p_values->>'image_path','') is null
+      then '[]'::jsonb else jsonb_build_array(p_values->>'image_path') end
+  );
+  if jsonb_typeof(image_paths)<>'array' or jsonb_array_length(image_paths)>10 then
+    raise exception 'Upload between 0 and 10 collateral images';
+  end if;
+  for image_record in
+    select value,ordinality
+    from jsonb_array_elements_text(image_paths) with ordinality as paths(value,ordinality)
+    order by ordinality
+  loop
+    if image_record.value not like 'assets/%' then
+      raise exception 'Invalid collateral image path';
+    end if;
+    insert into public.asset_media(asset_id,storage_path,media_type,sort_order,created_by)
+    values(asset.id,image_record.value,'public_image',image_record.ordinality-1,actor);
+  end loop;
+
+  perform private.log_event(
+    'asset.created','asset',asset.id::text,null,to_jsonb(asset),p_values->>'reason'
+  );
+  return to_jsonb(asset);
+end
+$$;
+
+create or replace function private.create_listing(p_values jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path=''
+as $$
+declare
+  actor uuid;
+  listing public.listings;
+  authorization_row public.sale_authorizations;
+  request public.approval_requests;
+  config jsonb;
+  images text[];
+begin
+  actor=private.require_staff(2);
+  select * into authorization_row
+  from public.sale_authorizations
+  where id=(p_values->>'sale_authorization_id')::uuid
+    and asset_id=(p_values->>'asset_id')::uuid;
+  if authorization_row.status<>'approved' or authorization_row.id is null then
+    raise exception 'Approved sale authorization required';
+  end if;
+
+  if jsonb_typeof(p_values->'images')='array' then
+    select array_agg(value order by ordinality) into images
+    from jsonb_array_elements_text(p_values->'images') with ordinality as photos(value,ordinality);
+  end if;
+  if coalesce(cardinality(images),0)=0 and nullif(p_values->>'image','') is not null then
+    images=array[p_values->>'image'];
+  end if;
+  if coalesce(cardinality(images),0)>10 then
+    raise exception 'A listing can have no more than 10 images';
+  end if;
+
+  insert into public.listings(
+    asset_id,sale_authorization_id,slug,method,status,public_title,
+    public_description,fixed_price,collection_point,terms_version,image,images,
+    condition_grade,defects,created_by
+  ) values(
+    authorization_row.asset_id,authorization_row.id,p_values->>'slug',
+    (p_values->>'method')::public.sale_method,'pending_approval',
+    p_values->>'title',p_values->>'description',
+    case when p_values->>'method'='auction' then null
+      else (p_values->>'price')::numeric end,
+    p_values->>'collection_point',p_values->>'terms_version',
+    coalesce(nullif(p_values->>'image',''),images[1]),coalesce(images,'{}'::text[]),
+    coalesce(nullif(p_values->>'condition_grade',''),'Good'),
+    p_values->>'defects',actor
+  ) returning * into listing;
+
+  if listing.method in ('auction','auction_plus_buy_now') then
+    select settings into config
+    from public.system_settings
+    order by created_at desc
+    limit 1;
+    insert into public.auctions(
+      listing_id,starts_at,ends_at,starting_bid,min_increment,
+      extension_window_seconds,extension_seconds,max_extension_count
+    ) values(
+      listing.id,now(),
+      now()+make_interval(hours=>(p_values->>'duration_hours')::integer),
+      (p_values->>'price')::numeric,(p_values->>'increment')::numeric,
+      (config->>'extension_window')::integer,
+      (config->>'extension_seconds')::integer,
+      (config->>'max_extensions')::integer
+    );
+  end if;
+
+  insert into public.approval_requests(
+    action_type,entity_type,entity_id,requested_by,required_min_level,
+    reason,proposed_values
+  ) values(
+    'publish_listing','listing',listing.id,actor,3,
+    p_values->>'reason',p_values
+  ) returning * into request;
+  perform private.log_event(
+    'listing.created','listing',listing.id::text,null,to_jsonb(listing)
+  );
+  return to_jsonb(listing);
+end
+$$;
+
+create or replace function private.catalog_sync()
+returns trigger
+language plpgsql
+security definer
+set search_path=''
+as $$
+declare
+  v_listing_id uuid;
+  listing public.listings;
+  asset public.collateral_assets;
+  auction_row public.auctions;
+  catalog_images text[];
+begin
+  if tg_table_name='listings' then
+    v_listing_id=new.id;
+  else
+    v_listing_id=new.listing_id;
+  end if;
+  select * into listing from public.listings where id=v_listing_id;
+  select * into asset from public.collateral_assets where id=listing.asset_id;
+  select * into auction_row from public.auctions where public.auctions.listing_id=v_listing_id;
+  if listing.status not in ('live','reserved','sold') then
+    delete from public.public_catalog where id=v_listing_id;
+    return new;
+  end if;
+  if not exists(
+    select 1 from public.sale_authorizations
+    where id=listing.sale_authorization_id and asset_id=listing.asset_id and status='approved'
+  ) then
+    raise exception 'Approved sale authorization required';
+  end if;
+  catalog_images=coalesce(nullif(listing.images,'{}'::text[]),
+    case when nullif(listing.image,'') is null then '{}'::text[] else array[listing.image] end);
+
+  insert into public.public_catalog(
+    id,slug,title,category,method,price,location,condition,image,images,
+    ends_at,bids,increment,description,defects,specs,status,created_at
+  ) values(
+    listing.id,listing.slug,listing.public_title,asset.category,listing.method::text,
+    coalesce(auction_row.current_price,auction_row.starting_bid,listing.fixed_price),
+    listing.collection_point,listing.condition_grade,coalesce(listing.image,catalog_images[1]),catalog_images,
+    auction_row.ends_at,(select count(*) from public.bids where auction_listing_id=v_listing_id),
+    coalesce(auction_row.min_increment,0),listing.public_description,listing.defects,
+    listing.specs,listing.status::text,listing.created_at
+  ) on conflict(id) do update set
+    title=excluded.title,method=excluded.method,price=excluded.price,status=excluded.status,
+    ends_at=excluded.ends_at,bids=excluded.bids,increment=excluded.increment,
+    image=excluded.image,images=excluded.images,description=excluded.description,defects=excluded.defects;
+  return new;
+end
+$$;
 $cmrp_schema$;
   create table public.cmrp_installation(version text primary key,installed_at timestamptz not null default now());
   alter table public.cmrp_installation enable row level security;
   revoke all on public.cmrp_installation from public,anon,authenticated;
-  insert into public.cmrp_installation(version) values('20261009203000_cash_sales_and_logs.sql');
+  insert into public.cmrp_installation(version) values('20261009240000_listing_image_galleries.sql');
 end
 $cmrp_installer$;
 notify pgrst, 'reload schema';

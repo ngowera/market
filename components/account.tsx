@@ -12,6 +12,16 @@ import {
 import { Header, Footer, AssetCard } from "./marketplace";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { money } from "@/lib/catalog";
+function StaffSignInImage() {
+  return (
+    <div className="auth-intro auth-intro-image">
+      <img
+        src="/assets/collateral-loan.png"
+        alt="Collateral-backed loan assets including property, gold, a vehicle, and a fixed deposit"
+      />
+    </div>
+  );
+}
 export default function Account({
   staff = false,
   onAuthenticated,
@@ -94,14 +104,7 @@ export default function Account({
   if (user && staff)
     return (
       <div className="auth-layout">
-        <div className="auth-intro">
-          <ShieldCheck size={35} />
-          <h1>Staff verification</h1>
-          <p>
-            Access is limited to active staff. Senior staff must complete
-            multi-factor verification.
-          </p>
-        </div>
+        <StaffSignInImage />
         <div className="auth-panel">
           <h2>Secure staff access</h2>
           {error && <p className="error">{error}</p>}
@@ -143,33 +146,31 @@ export default function Account({
       {!staff && <Header />}
       {!user ? (
         <div className="auth-layout">
-          <div className="auth-intro">
-            <ShieldCheck size={35} />
-            <h1>
-              {staff
-                ? "The recovery workspace."
-                : "Your next asset starts here."}
-            </h1>
-            <p>
-              {staff
-                ? "Named accounts. Four security levels. Every important action has an accountable record."
-                : "One account to follow auctions, manage offers and keep track of your purchases."}
-            </p>
-            <ul>
-              <li>
-                <Clock size={17} />
-                Track bids and auction outcomes
-              </li>
-              <li>
-                <Heart size={17} />
-                Keep a personal watchlist
-              </li>
-              <li>
-                <PackageCheck size={17} />
-                Follow payments and collection
-              </li>
-            </ul>
-          </div>
+          {staff ? (
+            <StaffSignInImage />
+          ) : (
+            <div className="auth-intro">
+              <ShieldCheck size={35} />
+              <h1>Your next asset starts here.</h1>
+              <p>
+                One account to follow auctions, manage offers and keep track of your purchases.
+              </p>
+              <ul>
+                <li>
+                  <Clock size={17} />
+                  Track bids and auction outcomes
+                </li>
+                <li>
+                  <Heart size={17} />
+                  Keep a personal watchlist
+                </li>
+                <li>
+                  <PackageCheck size={17} />
+                  Follow payments and collection
+                </li>
+              </ul>
+            </div>
+          )}
           <div className="auth-panel">
             <h2>
               {staff

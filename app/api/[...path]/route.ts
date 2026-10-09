@@ -153,6 +153,29 @@ async function get(request: Request, path: string) {
       names.map((n) => sb("/rest/v1/" + n + "?select=*&limit=200", {}, token)),
     );
     const d = Object.fromEntries(names.map((n, i) => [n, rows[i]]));
+    if (staff.security_level >= 2 && d.collateral_assets) {
+      const media = await sb(
+        "/rest/v1/asset_media?media_type=eq.public_image&select=asset_id,storage_path,sort_order&order=sort_order.asc&limit=500",
+        {},
+        token,
+      );
+      const imagesByAsset = new Map<string, { url: string; path: string }[]>();
+      const imageRoot = config().url!.replace(/\/$/, "") + "/storage/v1/object/public/listing-images/";
+      for (const item of media) {
+        const images = imagesByAsset.get(item.asset_id) || [];
+        images.push({
+          path: item.storage_path,
+          url: imageRoot + item.storage_path,
+        });
+        imagesByAsset.set(item.asset_id, images);
+      }
+      d.collateral_assets = d.collateral_assets.map((asset: any) => {
+        const images = imagesByAsset.get(asset.id) || [];
+        return images.length
+          ? { ...asset, images, image_path: images[0].path, image: images[0].url }
+          : asset;
+      });
+    }
     return json({
       listings: d.public_catalog,
       assets: d.collateral_assets || d.public_catalog,
@@ -267,6 +290,7 @@ async function post(request: Request, path: string) {
     const { token } = await staffUser(request, 2);
     const form = await request.formData();
     const file = form.get("file");
+    const purpose = form.get("purpose") === "asset" ? "assets" : "listings";
     const extensions: Record<string, string> = {
       "image/jpeg": "jpg",
       "image/png": "png",
@@ -277,7 +301,7 @@ async function post(request: Request, path: string) {
     if (file.size > maxImageSize)
       return json({ error: "Image must be 5 MB or smaller." }, 413);
     const c = config();
-    const objectPath = `listings/${crypto.randomUUID()}.${extensions[file.type]}`;
+    const objectPath = `${purpose}/${crypto.randomUUID()}.${extensions[file.type]}`;
     await sb(
       "/storage/v1/object/listing-images/" + objectPath,
       {
@@ -292,6 +316,7 @@ async function post(request: Request, path: string) {
         c.url!.replace(/\/$/, "") +
         "/storage/v1/object/public/listing-images/" +
         objectPath,
+      storage_path: objectPath,
     });
   }
   if (Number(request.headers.get("content-length") || 0) > 65536)
@@ -556,6 +581,26 @@ async function post(request: Request, path: string) {
       return json(await rpc("create_asset", { p_values: b }, token));
     if (action === "listing")
       return json(await rpc("create_listing", { p_values: b }, token));
+    if (action === "price-change") {
+      const d = z
+        .object({
+          listing_id: uuid,
+          price: amount,
+          reason: z.string().trim().min(3).max(500),
+        })
+        .parse(b);
+      return json(
+        await rpc(
+          "request_change",
+          {
+            p_action: "listing_price_change",
+            p_entity: d.listing_id,
+            p_values: { price: d.price, reason: d.reason },
+          },
+          token,
+        ),
+      );
+    }
     if (action === "authorization")
       return json(
         await rpc(
