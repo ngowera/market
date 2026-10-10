@@ -22,6 +22,9 @@ import {
   LockKeyhole,
   PackageCheck,
   X,
+  MessageCircle,
+  UsersRound,
+  ExternalLink,
 } from "lucide-react";
 import {
   Select,
@@ -57,6 +60,74 @@ export function Brand() {
         nyasamarket.com<small>SECURE ASSET MARKETPLACE</small>
       </span>
     </Link>
+  );
+}
+export function WhatsAppContact() {
+  const [open, setOpen] = useState(false);
+  const container = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!container.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  return (
+    <div className="whatsapp-float" ref={container}>
+      {open && (
+        <div className="whatsapp-menu" id="whatsapp-contact-options">
+          <div className="whatsapp-menu-heading">
+            <b>How can we help?</b>
+            <span>Choose a WhatsApp contact</span>
+          </div>
+          <a
+            href="https://wa.me/265981954171?text=Hello%2C%20I%20need%20help%20with%20Nyasa%20Market."
+            target="_blank"
+            rel="noreferrer"
+          >
+            <span className="whatsapp-menu-icon"><MessageCircle size={18} /></span>
+            <span className="whatsapp-link-copy">
+              <b>Questions & help</b>
+              <small>0981 954 171</small>
+            </span>
+            <ExternalLink size={15} />
+          </a>
+          <a
+            href="https://chat.whatsapp.com/D7OAaObZgHG0gs8fhb9Djk"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <span className="whatsapp-menu-icon"><UsersRound size={18} /></span>
+            <span className="whatsapp-link-copy">
+              <b>Join the WhatsApp group</b>
+              <small>Community updates and discussion</small>
+            </span>
+            <ExternalLink size={15} />
+          </a>
+        </div>
+      )}
+      <button
+        className="whatsapp-float-button"
+        type="button"
+        aria-label={open ? "Close WhatsApp contact options" : "Open WhatsApp contact options"}
+        aria-expanded={open}
+        aria-controls="whatsapp-contact-options"
+        title="WhatsApp support and community"
+        onClick={() => setOpen((current) => !current)}
+      >
+        <img src="/assets/whatsapp.webp" alt="" />
+      </button>
+    </div>
   );
 }
 export function Header({
@@ -121,6 +192,7 @@ export function Header({
           </Link>
           <Link href="/help">How it works</Link>
         </nav>
+        <WhatsAppContact />
     </header>
   );
 }

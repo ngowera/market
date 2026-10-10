@@ -191,6 +191,103 @@ small {
 .public-header nav a:hover {
   color: #087c68;
 }
+.whatsapp-float {
+  position: fixed;
+  right: 28px;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  z-index: 100;
+  display: grid;
+  justify-items: end;
+  gap: 12px;
+}
+.whatsapp-float-button {
+  display: grid;
+  place-items: center;
+  width: 66px;
+  height: 66px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 5px 22px #102a3c35;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+.whatsapp-float-button:hover {
+  transform: translateY(-2px) scale(1.035);
+  box-shadow: 0 8px 26px #102a3c42;
+}
+.whatsapp-float-button img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 50%;
+}
+.whatsapp-menu {
+  width: min(340px, calc(100vw - 32px));
+  max-height: calc(100svh - 120px);
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid #dce5e6;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 12px 38px #102a3c26;
+  animation: whatsapp-menu-in 150ms ease both;
+}
+@keyframes whatsapp-menu-in {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.whatsapp-menu-heading {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px 12px;
+}
+.whatsapp-menu-heading b {
+  color: #183747;
+  font-size: 14px;
+}
+.whatsapp-menu-heading span,
+.whatsapp-link-copy small {
+  color: #718590;
+  font-size: 11px;
+}
+.whatsapp-menu > a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 9px 10px;
+  border-top: 1px solid #edf1f2;
+  color: #58717d;
+}
+.whatsapp-menu > a:hover {
+  background: #f3faf6;
+  color: #176f5e;
+}
+.whatsapp-menu-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  border-radius: 50%;
+  background: #e8f7ef;
+  color: #16866a;
+}
+.whatsapp-link-copy {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 4px;
+}
+.whatsapp-link-copy b {
+  color: #244454;
+  font-size: 12px;
+}
+.whatsapp-link-copy small {
+  overflow-wrap: anywhere;
+}
 .mobile-search-toggle,
 .mobile-header-search {
   display: none;
@@ -2412,6 +2509,14 @@ footer a:not(.brand) {
   }
   .panel {
     padding: 17px;
+  }
+  .whatsapp-float {
+    right: 15px;
+    bottom: calc(15px + env(safe-area-inset-bottom, 0px));
+  }
+  .whatsapp-float-button {
+    width: 58px;
+    height: 58px;
   }
   .admin-settings {
     grid-template-columns: 1fr;
