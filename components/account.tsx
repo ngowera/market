@@ -40,6 +40,7 @@ export default function Account({
   const [code, setCode] = useState("");
   const [oauthClient, setOauthClient] = useState<any>(null);
   const [googleBusy, setGoogleBusy] = useState(false);
+  const [authSuccess, setAuthSuccess] = useState(false);
 
   function safeReturnPath() {
     const requested =
@@ -81,6 +82,7 @@ export default function Account({
     let subscription: { unsubscribe: () => void } | undefined;
     const initialize = async () => {
       await load();
+      const completingGoogleSignIn = new URLSearchParams(window.location.search).has("code");
       try {
         const response = await fetch("/api/public-config");
         const configuration: any = await response.json();
@@ -107,6 +109,10 @@ export default function Account({
             sessionStorage.removeItem("cmrp_auth_next");
             window.location.replace(returnPath);
           } else {
+            if (completingGoogleSignIn) {
+              setAuthSuccess(true);
+              window.history.replaceState({}, "", window.location.pathname);
+            }
             void load();
           }
         });
@@ -393,6 +399,19 @@ export default function Account({
             )}
           </div>
         </div>
+      ) : authSuccess ? (
+        <main className="auth-success-page">
+          <div className="auth-success-mark"><CheckCircle2 size={30} /></div>
+          <div className="eyebrow">ACCOUNT READY</div>
+          <h1>Google sign-in successful</h1>
+          <p>
+            Welcome{user.user_metadata?.display_name ? `, ${user.user_metadata.display_name}` : ""}. Your buyer account is ready to use.
+          </p>
+          <div className="auth-success-actions">
+            <Link className="btn primary" href="/browse">Browse marketplace</Link>
+            <button className="btn secondary" onClick={() => setAuthSuccess(false)}>Open my account</button>
+          </div>
+        </main>
       ) : (
         <main className="page-wrap">
           <div className="section-top">

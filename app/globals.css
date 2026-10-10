@@ -1358,6 +1358,45 @@ footer a:not(.brand) {
   flex: 1;
   background: #e1e8ea;
 }
+.auth-success-page {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  min-height: 62vh;
+  padding: 48px 24px;
+  text-align: center;
+}
+.auth-success-mark {
+  display: grid;
+  place-items: center;
+  width: 62px;
+  height: 62px;
+  margin-bottom: 22px;
+  border-radius: 50%;
+  background: #e6f6ed;
+  color: #137755;
+}
+.auth-success-page .eyebrow {
+  color: #16866a;
+}
+.auth-success-page h1 {
+  margin: 10px 0;
+  color: #183747;
+  font-size: 30px;
+}
+.auth-success-page > p {
+  max-width: 440px;
+  color: #718590;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.auth-success-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 26px;
+}
 .checkout-page {
   width: min(1060px, calc(100% - 48px));
   min-height: 65vh;
