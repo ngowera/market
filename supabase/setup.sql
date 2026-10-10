@@ -2208,7 +2208,7 @@ begin
       nullif(btrim(buyers.email),''),
       'Unknown buyer'
     ),
-    buyers.email,
+    buyers.email::text,
     orders.buyer_contact,
     releases.collector_name,
     releases.collector_ref,
