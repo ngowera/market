@@ -25,6 +25,7 @@ import {
   MessageCircle,
   UsersRound,
   ExternalLink,
+  UserRound,
 } from "lucide-react";
 import {
   Select,
@@ -140,6 +141,32 @@ export function Header({
   onSaleMethodChange?: (method: "auction" | "fixed") => void;
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
+  const [viewer, setViewer] = useState<any>(null);
+  const [avatarFailed, setAvatarFailed] = useState(false);
+  const avatarUrl = viewer?.user_metadata?.avatar_url || viewer?.user_metadata?.picture || "";
+
+  useEffect(() => {
+    let active = true;
+    const readSession = async () => {
+      try {
+        let response = await fetch("/api/session", { cache: "no-store" });
+        if (response.status === 401) {
+          const refreshed = await fetch("/api/auth/refresh", { method: "POST" });
+          if (refreshed.ok) response = await fetch("/api/session", { cache: "no-store" });
+        }
+        if (!response.ok) return;
+        const session: any = await response.json();
+        if (active) setViewer(session.user);
+      } catch {}
+    };
+    void readSession();
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    setAvatarFailed(false);
+  }, [avatarUrl]);
+
   return (
     <header className="public-header">
         <Brand />
@@ -192,6 +219,24 @@ export function Header({
           </Link>
           <Link href="/help">How it works</Link>
         </nav>
+        <div className="profile-menu">
+          <Link
+            className="profile-avatar-button"
+            href="/account"
+            aria-label={viewer ? "Open your Nyasa Market account" : "Sign in to Nyasa Market"}
+            title={viewer ? "Your account" : "Sign in to Nyasa Market"}
+          >
+            {viewer && avatarUrl && !avatarFailed ? (
+              <img src={avatarUrl} alt="" referrerPolicy="no-referrer" onError={() => setAvatarFailed(true)} />
+            ) : viewer ? (
+              <span className="profile-initials">
+                {(viewer.user_metadata?.full_name || viewer.user_metadata?.name || viewer.email || "N").slice(0, 1).toUpperCase()}
+              </span>
+            ) : (
+              <UserRound size={20} />
+            )}
+          </Link>
+        </div>
         <WhatsAppContact />
     </header>
   );

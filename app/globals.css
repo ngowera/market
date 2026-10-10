@@ -191,6 +191,34 @@ small {
 .public-header nav a:hover {
   color: #087c68;
 }
+.profile-menu {
+  position: relative;
+  z-index: 30;
+  flex: 0 0 auto;
+}
+.profile-avatar-button {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #dce5e6;
+  border-radius: 50%;
+  background: #eef5f3;
+  color: #315f55;
+}
+.profile-avatar-button img,
+.profile-menu-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.profile-initials {
+  font-size: 14px;
+  font-weight: 700;
+}
 .whatsapp-float {
   position: fixed;
   right: 28px;
@@ -2321,6 +2349,14 @@ footer a:not(.brand) {
     border-radius: 7px;
     background: #fff;
     color: #087c68;
+  }
+  .profile-menu {
+    order: 3;
+    margin-left: -5px;
+  }
+  .profile-avatar-button {
+    width: 40px;
+    height: 40px;
   }
   .mobile-header-search {
     position: absolute;
