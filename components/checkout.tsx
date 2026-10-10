@@ -18,7 +18,26 @@ export default function Checkout() {
       return;
     }
     let active = true;
-    fetch("/api/catalog", { cache: "no-store" })
+    const requireSession = async () => {
+      let session = await fetch("/api/session", { cache: "no-store" });
+      if (session.status === 401) {
+        const refreshed = await fetch("/api/auth/refresh", { method: "POST" });
+        if (refreshed.ok) session = await fetch("/api/session", { cache: "no-store" });
+      }
+      if (session.status === 401) {
+        const checkoutPath = `${import.meta.env.BASE_URL}checkout?listing=${encodeURIComponent(slug)}`;
+        window.location.replace(`${import.meta.env.BASE_URL}account?next=${encodeURIComponent(checkoutPath)}`);
+        return false;
+      }
+      if (!session.ok) {
+        const result: any = await session.json().catch(() => ({}));
+        throw Error(result.error || "Unable to verify your buyer account.");
+      }
+      return true;
+    };
+    requireSession().then((authorized) => {
+      if (!authorized || !active) return;
+      return fetch("/api/catalog", { cache: "no-store" })
       .then(async (response) => {
         const data: any = await response.json();
         if (!response.ok) throw Error(data.error || "The catalogue is unavailable.");
@@ -32,6 +51,12 @@ export default function Checkout() {
       .finally(() => {
         if (active) setLoading(false);
       });
+    }).catch((failure) => {
+      if (active) {
+        setError((failure as Error).message);
+        setLoading(false);
+      }
+    });
     return () => { active = false; };
   }, []);
 

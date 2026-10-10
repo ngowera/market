@@ -40,12 +40,34 @@ export default function Account({
   const [code, setCode] = useState("");
   const [oauthClient, setOauthClient] = useState<any>(null);
   const [googleBusy, setGoogleBusy] = useState(false);
+
+  function safeReturnPath() {
+    const requested =
+      new URLSearchParams(window.location.search).get("next") ||
+      sessionStorage.getItem("cmrp_auth_next");
+    if (!requested || !requested.startsWith("/") || requested.startsWith("//")) return null;
+    try {
+      const destination = new URL(requested, window.location.origin);
+      const appRoot = new URL(import.meta.env.BASE_URL, window.location.origin).pathname;
+      if (destination.origin !== window.location.origin || !destination.pathname.startsWith(appRoot)) return null;
+      return destination.pathname + destination.search + destination.hash;
+    } catch {
+      return null;
+    }
+  }
+
   async function load() {
     let r = await fetch("/api/session");
     if(r.status===401){const refreshed=await fetch("/api/auth/refresh",{method:"POST"});if(refreshed.ok)r=await fetch("/api/session");}
     if (r.ok) {
       const d: any = await r.json();
       setUser(d.user);
+      const returnPath = safeReturnPath();
+      if (returnPath) {
+        sessionStorage.removeItem("cmrp_auth_next");
+        window.location.replace(returnPath);
+        return;
+      }
       if (staff) {
         onAuthenticated?.(d);
         return;
@@ -69,6 +91,8 @@ export default function Account({
             flowType: "pkce",
             autoRefreshToken: false,
             persistSession: true,
+            storage: window.sessionStorage,
+            storageKey: "cmrp_google_oauth",
             detectSessionInUrl: true,
           },
         });
@@ -78,7 +102,13 @@ export default function Account({
           sessionStorage.setItem("cmrp_access_token", session.access_token);
           if (session.refresh_token) sessionStorage.setItem("cmrp_refresh_token", session.refresh_token);
           setUser(session.user);
-          void load();
+          const returnPath = safeReturnPath();
+          if (returnPath) {
+            sessionStorage.removeItem("cmrp_auth_next");
+            window.location.replace(returnPath);
+          } else {
+            void load();
+          }
         });
         subscription = data.subscription;
         const { data: sessionData } = await client.auth.getSession();
@@ -109,11 +139,13 @@ export default function Account({
         const configuration: any = await response.json();
         if (!response.ok) throw Error(configuration.error);
         client = createClient(configuration.url, configuration.key, {
-          auth: { flowType: "pkce", autoRefreshToken: false, persistSession: true, detectSessionInUrl: true },
+          auth: { flowType: "pkce", autoRefreshToken: false, persistSession: true, storage: window.sessionStorage, storageKey: "cmrp_google_oauth", detectSessionInUrl: true },
         });
         setOauthClient(client);
       }
       const redirectTo = new URL(`${import.meta.env.BASE_URL}account`, window.location.origin).toString();
+      const requested = safeReturnPath();
+      if (requested) sessionStorage.setItem("cmrp_auth_next", requested);
       const { error: oauthError } = await client.auth.signInWithOAuth({
         provider: "google",
         options: { redirectTo, queryParams: { prompt: "select_account" } },

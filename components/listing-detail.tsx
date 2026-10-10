@@ -294,7 +294,10 @@ export default function ListingDetail({
                 onClick={() => {
                   setError("");
                   if (auction) setAction("bid");
-                  else window.location.assign(`${import.meta.env.BASE_URL}checkout?listing=${encodeURIComponent(item.slug)}`);
+                  else {
+                    const checkout = `${import.meta.env.BASE_URL}checkout?listing=${encodeURIComponent(item.slug)}`;
+                    window.location.assign(`${import.meta.env.BASE_URL}account?next=${encodeURIComponent(checkout)}`);
+                  }
                 }}
                 disabled={item.status !== "live"}
               >
