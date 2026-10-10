@@ -269,6 +269,7 @@ export function Footer() {
           <br />
           All prices in MWK
         </p>
+        <Link href="/account">My account <ArrowRight size={14} /></Link>
       </div>
       <div className="footer-bottom">
         © {new Date().getFullYear()} nyasamarket.com. All rights reserved.
