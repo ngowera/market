@@ -32,6 +32,7 @@ import {
   Check,
   Link2,
   X,
+  Menu,
 } from "lucide-react";
 import {
   SidebarProvider,
@@ -119,6 +120,8 @@ export default function Admin({ connected }: { connected: boolean }) {
   const [selectedListingIds, setSelectedListingIds] = useState<string[]>([]);
   const [archiveSelection, setArchiveSelection] = useState<string[]>([]);
   const [reportGraphModes, setReportGraphModes] = useState<Record<string, "line" | "bar">>({});
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   useEffect(() => {
     if (connected)
       fetch("/api/session")
@@ -176,6 +179,39 @@ export default function Admin({ connected }: { connected: boolean }) {
   const pendingLoanCount = Number(attention.loan_pending || 0);
   const deadLetterLoanCount = Number(attention.loan_dead_letter || 0);
   const postedLoanCount = Number(attention.loan_posted || 0);
+  const pendingApprovals = approvals.filter((approval: any) => approval.status === "pending");
+  const handoverOrders = orders.filter((order: any) => order.status === "paid");
+  const alertCount = pendingApprovals.length + handoverOrders.length + deadLetterLoanCount;
+  const notificationItems = [
+    ...pendingApprovals.slice(0, 5).map((approval: any) => ({
+      id: `approval-${approval.id}`,
+      title: approval.proposed_values?.title || approval.action_type.replaceAll("_", " "),
+      detail: `Approval needed · Level ${approval.required_min_level}+`,
+      view: "Approvals",
+      kind: "attention",
+    })),
+    ...handoverOrders.slice(0, 5).map((order: any) => ({
+      id: `handover-${order.id}`,
+      title: `Paid order ${order.order_no}`,
+      detail: `${order.public_title || "Asset"} · awaiting handover`,
+      view: "Release desk",
+      kind: "attention",
+    })),
+    ...(deadLetterLoanCount > 0 ? [{
+      id: "loan-sync-errors",
+      title: `${deadLetterLoanCount} loan sync failure${deadLetterLoanCount === 1 ? "" : "s"}`,
+      detail: "Review the loan integration queue",
+      view: "Settlements",
+      kind: "attention",
+    }] : []),
+    ...orders.filter((order: any) => order.status === "released").slice(0, 3).map((order: any) => ({
+      id: `released-${order.id}`,
+      title: `Handover completed · ${order.order_no}`,
+      detail: `${order.public_title || "Asset"} · ${order.handover_staff || "Staff handover"}`,
+      view: "Release desk",
+      kind: "activity",
+    })),
+  ].slice(0, 8);
   const loanIntegrationSummary = deadLetterLoanCount
     ? `${deadLetterLoanCount} failed · ${pendingLoanCount} pending`
     : pendingLoanCount
@@ -242,6 +278,10 @@ export default function Admin({ connected }: { connected: boolean }) {
     },
   ];
   const level = staff?.security_level || 0;
+  const mobilePrimaryNavigation = navigation.filter(([title]) =>
+    ["Dashboard", "Collateral", "Listings", "Configuration"].includes(title) &&
+    (title !== "Configuration" || level >= 4),
+  );
   const write = async (path: string, body: any) => {
     setBusy(true);
     setError("");
@@ -285,6 +325,14 @@ export default function Admin({ connected }: { connected: boolean }) {
     setError("");
     setSelected(row);
     setModal(type);
+  }
+  function navigateToView(title: string) {
+    setView(title);
+    setQuery("");
+    setError("");
+    setSuccess("");
+    setMobileDrawerOpen(false);
+    setNotificationsOpen(false);
   }
   function exportCsv() {
     const rows =
@@ -410,8 +458,53 @@ export default function Admin({ connected }: { connected: boolean }) {
       </Sidebar>
       <div className="admin-main">
         <header className="admin-topbar">
-          <b>Recovery operations</b>
+          <button
+            aria-label="Open menu"
+            aria-expanded={mobileDrawerOpen}
+            className="admin-mobile-menu-button"
+            onClick={() => setMobileDrawerOpen(true)}
+          >
+            <Menu size={20} />
+          </button>
+          <b>nyasamarket admin</b>
           <span>/ {view}</span>
+          <div className="admin-notifications">
+            <button
+              aria-label={`Notifications${notificationItems.length ? `, ${notificationItems.length} updates` : ""}`}
+              aria-expanded={notificationsOpen}
+              className="admin-notification-button"
+              onClick={() => setNotificationsOpen((open) => !open)}
+            >
+              <Bell size={19} />
+              {notificationItems.length > 0 && <i className="admin-notification-dot" />}
+            </button>
+            {notificationsOpen && (
+              <div className="admin-notification-panel" role="dialog" aria-label="Notifications">
+                <div className="admin-notification-heading">
+                  <div>
+                    <b>Notifications</b>
+                    <small>{alertCount ? `${alertCount} need attention` : "Account activity"}</small>
+                  </div>
+                  <button aria-label="Close notifications" onClick={() => setNotificationsOpen(false)}>
+                    <X size={17} />
+                  </button>
+                </div>
+                <div className="admin-notification-list">
+                  {notificationItems.length ? notificationItems.map((item: any) => (
+                    <button
+                      className="admin-notification-item"
+                      key={item.id}
+                      onClick={() => navigateToView(item.view)}
+                    >
+                      <i className={item.kind === "attention" ? "attention" : "activity"} />
+                      <span><b>{item.title}</b><small>{item.detail}</small></span>
+                      <ChevronRight size={15} />
+                    </button>
+                  )) : <p className="admin-notification-empty">You’re all caught up. New account activity will appear here.</p>}
+                </div>
+              </div>
+            )}
+          </div>
           <div className="user-pill">
             <ShieldCheck size={15} />
             {"Level " + level + " · " + staff?.full_name}
@@ -430,6 +523,69 @@ export default function Admin({ connected }: { connected: boolean }) {
             </button>
           </div>
         </header>
+        {mobileDrawerOpen && (
+          <div className="admin-mobile-drawer-layer">
+            <button
+              aria-label="Close menu"
+              className="admin-mobile-drawer-backdrop"
+              onClick={() => setMobileDrawerOpen(false)}
+            />
+            <aside className="admin-mobile-drawer" aria-label="Admin navigation">
+              <div className="admin-mobile-drawer-heading">
+                <b>Menu</b>
+                <button aria-label="Close menu" onClick={() => setMobileDrawerOpen(false)}>
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="sidebar-label">RECOVERY WORKSPACE</div>
+              <nav className="admin-mobile-drawer-nav">
+                {navigation.map(([title, Icon]) => {
+                  if (level < 4 && ["Users & security", "Configuration"].includes(title)) return null;
+                  return (
+                    <button
+                      className={view === title ? "active" : ""}
+                      key={title}
+                      onClick={() => navigateToView(title)}
+                    >
+                      <Icon size={18} />
+                      <span>{title}</span>
+                      {title === "Approvals" && pendingApprovalCount > 0 && <i>{pendingApprovalCount}</i>}
+                    </button>
+                  );
+                })}
+              </nav>
+              <div className="admin-mobile-drawer-account">
+                <span className="avatar">{staff?.full_name?.slice(0, 2).toUpperCase()}</span>
+                <div>
+                  <b>{staff?.full_name}</b>
+                  <small>Level {level} staff</small>
+                </div>
+                <button
+                  aria-label="Sign out"
+                  onClick={async () => {
+                    await fetch("/api/auth/logout", { method: "POST" });
+                    setStaff(null);
+                  }}
+                >
+                  <LogOut size={17} />
+                </button>
+              </div>
+            </aside>
+          </div>
+        )}
+        <nav className="admin-mobile-bottom-nav" aria-label="Primary admin navigation">
+          {mobilePrimaryNavigation.map(([title, Icon]) => (
+            <button
+              aria-current={view === title ? "page" : undefined}
+              className={view === title ? "active" : ""}
+              key={title}
+              onClick={() => navigateToView(title)}
+            >
+              <Icon size={19} />
+              <span>{title}</span>
+            </button>
+          ))}
+        </nav>
         <main className="admin-content">
           <div className="admin-heading">
             <div>
