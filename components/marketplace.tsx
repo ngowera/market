@@ -358,14 +358,12 @@ export function AssetCard({ item }: { item: Listing }) {
       </div>
       <Dialog open={notice} onOpenChange={setNotice}>
         <DialogContent>
-          <DialogTitle>Save assets to your watchlist</DialogTitle>
+          <DialogTitle>Sign in to save this asset</DialogTitle>
           <DialogDescription>
-            Account access is available through the secure private portal.
-            Public browsing remains open for discovery only.
+            Sign in with Google or email to add assets to your personal watchlist.
           </DialogDescription>
-          <button className="btn primary" onClick={() => setNotice(false)}>
-            Close
-          </button>
+          <Link className="btn primary" href="/account">Sign in or create account</Link>
+          <button className="text-button" onClick={() => setNotice(false)}>Keep browsing</button>
         </DialogContent>
       </Dialog>
     </article>

@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { createClient } from "@supabase/supabase-js";
 import {
   ShieldCheck,
   Heart,
@@ -37,6 +38,8 @@ export default function Account({
   const [busy, setBusy] = useState(false);
   const [mfa, setMfa] = useState<any>(null);
   const [code, setCode] = useState("");
+  const [oauthClient, setOauthClient] = useState<any>(null);
+  const [googleBusy, setGoogleBusy] = useState(false);
   async function load() {
     let r = await fetch("/api/session");
     if(r.status===401){const refreshed=await fetch("/api/auth/refresh",{method:"POST"});if(refreshed.ok)r=await fetch("/api/session");}
@@ -52,8 +55,75 @@ export default function Account({
     }
   }
   useEffect(() => {
-    load();
+    let active = true;
+    let subscription: { unsubscribe: () => void } | undefined;
+    const initialize = async () => {
+      await load();
+      try {
+        const response = await fetch("/api/public-config");
+        const configuration: any = await response.json();
+        if (!response.ok) throw Error(configuration.error);
+        if (!active) return;
+        const client = createClient(configuration.url, configuration.key, {
+          auth: {
+            flowType: "pkce",
+            autoRefreshToken: false,
+            persistSession: true,
+            detectSessionInUrl: true,
+          },
+        });
+        setOauthClient(client);
+        const { data } = client.auth.onAuthStateChange((_event: string, session: any) => {
+          if (!session?.access_token) return;
+          sessionStorage.setItem("cmrp_access_token", session.access_token);
+          if (session.refresh_token) sessionStorage.setItem("cmrp_refresh_token", session.refresh_token);
+          setUser(session.user);
+          void load();
+        });
+        subscription = data.subscription;
+        const { data: sessionData } = await client.auth.getSession();
+        if (sessionData.session?.access_token) {
+          sessionStorage.setItem("cmrp_access_token", sessionData.session.access_token);
+          if (sessionData.session.refresh_token) sessionStorage.setItem("cmrp_refresh_token", sessionData.session.refresh_token);
+          await load();
+        }
+      } catch (error) {
+        if (active && window.location.search.includes("code=")) {
+          setError((error as Error).message);
+        }
+      }
+    };
+    void initialize();
+    return () => {
+      active = false;
+      subscription?.unsubscribe();
+    };
   }, []);
+  async function signInWithGoogle() {
+    setGoogleBusy(true);
+    setError("");
+    try {
+      let client = oauthClient;
+      if (!client) {
+        const response = await fetch("/api/public-config");
+        const configuration: any = await response.json();
+        if (!response.ok) throw Error(configuration.error);
+        client = createClient(configuration.url, configuration.key, {
+          auth: { flowType: "pkce", autoRefreshToken: false, persistSession: true, detectSessionInUrl: true },
+        });
+        setOauthClient(client);
+      }
+      const redirectTo = new URL(`${import.meta.env.BASE_URL}account`, window.location.origin).toString();
+      const { error: oauthError } = await client.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo, queryParams: { prompt: "select_account" } },
+      });
+      if (oauthError) throw oauthError;
+    } catch (error) {
+      setError((error as Error).message);
+      setGoogleBusy(false);
+    }
+  }
   async function auth(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
@@ -84,6 +154,7 @@ export default function Account({
   }
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
+    await oauthClient?.auth.signOut();
     setUser(null);
     setData({});
   }
@@ -202,6 +273,18 @@ export default function Account({
                 </button>
               </div>
             )}
+            {!staff && mode !== "recover" && (
+              <button
+                type="button"
+                className="btn secondary google-sign-in"
+                onClick={signInWithGoogle}
+                disabled={googleBusy}
+              >
+                <GoogleMark />
+                {googleBusy ? "Connecting to Google…" : "Continue with Google"}
+              </button>
+            )}
+            {!staff && mode !== "recover" && <div className="auth-divider"><span>or use email</span></div>}
             <form onSubmit={auth} className="form-grid">
               {mode === "signup" && (
                 <label>
@@ -417,6 +500,10 @@ export default function Account({
     </>
   );
 }
+function GoogleMark() {
+  return <span className="google-mark" aria-hidden="true">G</span>;
+}
+
 function Empty({ title, text }: { title: string; text: string }) {
   return (
     <div className="empty-state">

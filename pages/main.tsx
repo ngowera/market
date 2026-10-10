@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 import Link from 'next/link';
 import Marketplace, { Header, Footer } from '../components/marketplace';
 import Admin from '../components/admin';
+import Account from '../components/account';
+import Checkout from '../components/checkout';
 import ListingDetail from '../components/listing-detail';
 import Help from '../app/help/page';
 import BiddingHelp from '../app/help/bidding/page';
@@ -99,6 +101,10 @@ if (typeof window !== 'undefined') {
     ? <StaticListing slug={decodeURIComponent(route.slice('/listing/'.length))}/>
     : route === '/admin'
       ? <Admin connected={hasLocalApi || (!!apiUrl && !!supabaseKey)}/>
+      : route === '/account'
+        ? <Account />
+      : route === '/checkout'
+        ? <Checkout />
       : helpPages[route] ?? (route === '/' || route === '/browse'
         ? <Marketplace initial={[]} demo={false} browse={route === '/browse'}/>
         : <><Header/><main className="help-layout"><article><h1>Page not found</h1><p>Public browsing is read-only. Secure account and admin access are kept behind a separate portal.</p></article></main><Footer/></>);

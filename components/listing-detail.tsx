@@ -43,6 +43,7 @@ export default function ListingDetail({
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [signInRequired, setSignInRequired] = useState(false);
   const [success, setSuccess] = useState("");
   const [accepted, setAccepted] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
@@ -76,6 +77,7 @@ export default function ListingDetail({
     e.preventDefault();
     setBusy(true);
     setError("");
+    setSignInRequired(false);
     try {
       const r = await fetch(
         "/api/" +
@@ -109,6 +111,7 @@ export default function ListingDetail({
       setAction("");
     } catch (e) {
       setError((e as Error).message);
+      setSignInRequired(/sign in|verified buyer account/i.test((e as Error).message));
     } finally {
       setBusy(false);
     }
@@ -290,7 +293,8 @@ export default function ListingDetail({
                 className="btn primary"
                 onClick={() => {
                   setError("");
-                  setAction(auction ? "bid" : "buy");
+                  if (auction) setAction("bid");
+                  else window.location.assign(`${import.meta.env.BASE_URL}checkout?listing=${encodeURIComponent(item.slug)}`);
                 }}
                 disabled={item.status !== "live"}
               >
@@ -453,6 +457,11 @@ export default function ListingDetail({
                 .
               </label>
               {error && <p className="error">{error}</p>}
+              {signInRequired && (
+                <Link className="btn secondary" href="/account">
+                  Sign in with Google or email
+                </Link>
+              )}
               <button className="btn primary" disabled={busy || !accepted}>
                 {busy
                   ? "Submitting…"
