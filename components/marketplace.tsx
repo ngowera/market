@@ -41,6 +41,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { categories, money, methodName, type Listing } from "@/lib/catalog";
+import SupportChat from "./support-chat";
 const icons = [
   LayoutGrid,
   Car,
@@ -92,14 +93,14 @@ export function WhatsAppContact() {
             <span>Choose a WhatsApp contact</span>
           </div>
           <a
-            href="https://wa.me/265981954171?text=Hello%2C%20I%20need%20help%20with%20Nyasa%20Market."
+            href="https://wa.me/265989148075?text=Hello%2C%20I%20need%20help%20with%20Nyasa%20Market."
             target="_blank"
             rel="noreferrer"
           >
             <span className="whatsapp-menu-icon"><MessageCircle size={18} /></span>
             <span className="whatsapp-link-copy">
               <b>Questions & help</b>
-              <small>0981 954 171</small>
+              <small>0989 148 075</small>
             </span>
             <ExternalLink size={15} />
           </a>
@@ -237,6 +238,7 @@ export function Header({
             )}
           </Link>
         </div>
+        <SupportChat />
         <WhatsAppContact />
     </header>
   );

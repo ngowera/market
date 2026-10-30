@@ -23,6 +23,13 @@ export default function PrivacyComplaintsPage() {
               for the purposes of the sale process and related support.
             </p>
             <p>
+              If you message our team through this website, we store your name,
+              email address, and messages so authorized staff can reply. Your
+              conversation is available in the browser where you started it;
+              do not share that browser profile or send passwords, payment
+              credentials, or security codes in a support message.
+            </p>
+            <p>
               Public listings do not contain sensitive borrower or private
               evidence information. Payment details are handled through the
               approved secure payment provider, and collection arrangements are

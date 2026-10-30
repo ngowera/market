@@ -61,7 +61,7 @@ export default function Checkout() {
   }, []);
 
   const whatsappHref = listing
-    ? `https://wa.me/265981954171?text=${encodeURIComponent(
+    ? `https://wa.me/265989148075?text=${encodeURIComponent(
         `Hello Nyasa Market, I would like to buy this listing.\n\nItem: ${listing.title}\nListing: ${window.location.origin}${import.meta.env.BASE_URL}listing/${listing.slug}\nPrice shown: ${money(listing.price)}\n\nPlease confirm availability and explain the next payment steps.`,
       )}`
     : "#";

@@ -31,6 +31,8 @@ const activeSettingsPolicyMigration=await fs.readFile('supabase/migrations/20261
 await db.exec(activeSettingsPolicyMigration);
 const releaseReportingMigration=await fs.readFile('supabase/migrations/20261009300000_release_buyer_handover_reporting.sql','utf8');
 await db.exec(releaseReportingMigration);
+const supportMessagingMigration=await fs.readFile('supabase/migrations/20261030140000_support_messaging.sql','utf8');
+await db.exec(supportMessagingMigration);
 console.log('PASS: SQL installer executes and safely reruns on PostgreSQL');
 const maker='11111111-1111-4111-8111-111111111111',approver='22222222-2222-4222-8222-222222222222',buyer='33333333-3333-4333-8333-333333333333',other='44444444-4444-4444-8444-444444444444',noMfaStaff='55555555-5555-4555-8555-555555555555',secondLevel4='66666666-6666-4666-8666-666666666666';
 await db.exec(`insert into auth.users(id,email,email_confirmed_at) values('${maker}','maker@test.invalid',now()),('${approver}','approver@test.invalid',now()),('${buyer}','buyer@test.invalid',now()),('${other}','other@test.invalid',now()),('${noMfaStaff}','no-mfa@test.invalid',now()),('${secondLevel4}','second-level4@test.invalid',now());
@@ -39,6 +41,24 @@ insert into public.loans_bridge(id,source_system,external_loan_id,outstanding_am
 insert into public.collateral_assets(id,loan_bridge_id,asset_ref,title,category,created_by) values('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','COL-1','Test console','Gaming','${maker}');`);
 async function as(role,id,aal='aal2'){await db.exec(`reset role;select set_config('request.jwt.claim.sub','${id||''}',false);select set_config('request.jwt.claims','${JSON.stringify({role,aal})}',false);set role ${role};`)}
 async function rejects(sql,pattern){try{await db.query(sql);assert.fail('Expected rejection: '+sql)}catch(e){assert.match(e.message,pattern)}}
+const supportToken='77777777-7777-4777-8777-777777777777';
+await as('anon');
+await rejects('select * from public.support_conversations',/permission denied/);
+await rejects('select * from public.support_messages',/permission denied/);
+await rejects('select public.support_admin_conversations()',/permission denied/);
+const supportStart=(await db.query(`select public.support_start('${supportToken}','Customer','customer@example.invalid','I need help') as result`)).rows[0].result;
+assert.ok(supportStart.conversation_id);
+assert.equal((await db.query(`select jsonb_array_length(public.support_read('${supportToken}')->'messages') as count`)).rows[0].count,1);
+await db.query(`select public.support_customer_reply('${supportToken}','Following up')`);
+await rejects(`select public.support_read('88888888-8888-4888-8888-888888888888')`,/Conversation not found/);
+await as('authenticated',maker);
+const supportInbox=(await db.query('select public.support_admin_conversations() as conversations')).rows[0].conversations;
+assert.equal(supportInbox[0].customer_email,'customer@example.invalid');
+await db.query(`select public.support_admin_reply('${supportStart.conversation_id}','We are looking into this')`);
+await as('anon');
+const supportMessages=(await db.query(`select public.support_read('${supportToken}') as result`)).rows[0].result.messages;
+assert.deepEqual(supportMessages.map((message)=>message.sender),['customer','customer','admin']);
+console.log('PASS: support threads are private to their token and staff can reply');
 await as('anon');assert.equal((await db.query('select * from public.public_catalog')).rows.length,0);await rejects('select * from public.loans_bridge',/permission denied/);await rejects('select * from public.collateral_assets',/permission denied/);console.log('PASS: anonymous private data denied');
 await as('authenticated',maker);const auth=(await db.query(`select public.request_authorization('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','{"basis":"recovery approved","reference_no":"AUTH-1","reason":"Legal approval recorded","evidence_path":"evidence/test.pdf"}') as d`)).rows[0].d;
 await rejects(`select public.approve_action('${auth.id}','approved','Own approval')`,/permission|MFA/);console.log('PASS: Level 2 cannot call approval API');

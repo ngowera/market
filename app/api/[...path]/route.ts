@@ -72,6 +72,10 @@ async function rpc(name: string, args: any, token?: string, service = false) {
 }
 async function get(request: Request, path: string) {
   if(path==="public-config"){const c=config();if(!c.url||!c.key)return json({error:"Connection unavailable"},503);return json({url:c.url,key:c.key})}
+  if (path === "admin/messages") {
+    const { token } = await staffUser(request, 1);
+    return json(await rpc("support_admin_conversations", {}, token));
+  }
   if (path === "health")
     return json({
       status: "ok",
@@ -483,6 +487,34 @@ async function post(request: Request, path: string) {
   if (Number(request.headers.get("content-length") || 0) > 65536)
     return json({ error: "Payload too large" }, 413);
   const b: any = await request.json().catch(() => ({}));
+  if (path === "support/read") {
+    const d = z.object({ token: uuid }).parse(b);
+    return json(await rpc("support_read", { p_token: d.token }));
+  }
+  if (path === "support/start") {
+    const d = z.object({
+      token: uuid,
+      name: z.string().trim().min(2).max(120),
+      email: z.string().trim().email().max(254),
+      message: z.string().trim().min(1).max(2000),
+    }).parse(b);
+    return json(await rpc("support_start", {
+      p_token: d.token,
+      p_name: d.name,
+      p_email: d.email,
+      p_body: d.message,
+    }));
+  }
+  if (path === "support/reply") {
+    const d = z.object({
+      token: uuid,
+      message: z.string().trim().min(1).max(2000),
+    }).parse(b);
+    return json(await rpc("support_customer_reply", {
+      p_token: d.token,
+      p_body: d.message,
+    }));
+  }
   if (path === "auth/refresh") {
     const cookieRefresh = request.headers
       .get("cookie")
@@ -736,12 +768,24 @@ async function post(request: Request, path: string) {
   }
   if (path.startsWith("admin/")) {
     const action = path.slice(6);
-    const min = ["staff", "settings", "fee-rule", "edit-listing", "archive-listings"].includes(action)
-      ? 4
+    const min = action === "message-reply"
+      ? 1
+      : ["staff", "settings", "fee-rule", "edit-listing", "archive-listings"].includes(action)
+        ? 4
       : ["approve", "offer", "settlement", "cash-sale"].includes(action)
         ? 3
         : 2;
     const { staff } = await staffUser(request, min);
+    if (action === "message-reply") {
+      const d = z.object({
+        conversation_id: uuid,
+        message: z.string().trim().min(1).max(2000),
+      }).parse(b);
+      return json(await rpc("support_admin_reply", {
+        p_conversation: d.conversation_id,
+        p_body: d.message,
+      }, token));
+    }
     if (action === "cash-sale") {
       const d = z
         .object({
@@ -1058,9 +1102,18 @@ export async function GET(
   try {
     return await get(req, (await params).path.join("/"));
   } catch (e) {
+    if (e instanceof z.ZodError)
+      return json({ error: "Invalid request." }, 400);
+    const message = (e as Error).message;
     return json(
-      { error: (e as Error).message },
-      (e as Error).message.includes("sign in") ? 401 : 503,
+      { error: message },
+      message.includes("sign in")
+        ? 401
+        : message.includes("permission") || message.includes("MFA")
+          ? 403
+          : message.includes("not found")
+            ? 404
+            : 503,
     );
   }
 }

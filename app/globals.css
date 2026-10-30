@@ -316,6 +316,239 @@ small {
 .whatsapp-link-copy small {
   overflow-wrap: anywhere;
 }
+.support-float {
+  position: fixed;
+  right: 108px;
+  bottom: calc(28px + env(safe-area-inset-bottom, 0px));
+  z-index: 100;
+}
+.support-float-button {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #087c68;
+  color: #fff;
+  box-shadow: 0 5px 22px #102a3c35;
+  cursor: pointer;
+}
+.support-float-button:hover {
+  background: #066653;
+}
+.support-panel {
+  position: absolute;
+  right: 0;
+  bottom: 72px;
+  display: flex;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(600px, calc(100svh - 120px));
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #dce5e6;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 38px #102a3c30;
+}
+.support-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid #edf1f2;
+}
+.support-panel-heading > div,
+.support-inbox-thread > header > div {
+  display: grid;
+  gap: 4px;
+}
+.support-panel-heading b,
+.support-inbox-thread > header b {
+  color: #183747;
+  font-size: 14px;
+}
+.support-panel-heading span,
+.support-inbox-thread > header span {
+  color: #718590;
+  font-size: 11px;
+}
+.support-panel-heading button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #617281;
+}
+.support-messages,
+.support-inbox-messages {
+  display: flex;
+  min-height: 100px;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  overflow: auto;
+  padding: 14px;
+}
+.support-message {
+  width: fit-content;
+  max-width: 88%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f0f4f4;
+  color: #244454;
+}
+.support-message.customer {
+  align-self: flex-end;
+  background: #e4f4ed;
+}
+.support-message > span,
+.support-message time {
+  display: block;
+  color: #718590;
+  font-size: 10px;
+}
+.support-message p {
+  margin: 5px 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.support-message time {
+  text-align: right;
+}
+.support-form {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-top: 1px solid #edf1f2;
+}
+.support-form label,
+.support-inbox-reply label {
+  display: grid;
+  gap: 5px;
+  color: #385a6b;
+  font-size: 11px;
+  font-weight: 600;
+}
+.support-form input,
+.support-form textarea,
+.support-inbox-reply textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid #dce5e6;
+  border-radius: 6px;
+  color: #183747;
+  font: inherit;
+  font-size: 12px;
+  resize: vertical;
+}
+.support-form .btn,
+.support-inbox-reply .btn {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 7px;
+}
+.support-privacy {
+  color: #718590;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.support-empty {
+  margin: auto;
+  padding: 16px;
+  color: #718590;
+  font-size: 12px;
+  text-align: center;
+}
+.support-error {
+  margin: 10px 14px 0;
+  font-size: 11px;
+}
+.support-inbox {
+  display: grid;
+  min-height: 560px;
+  grid-template-columns: minmax(230px, 320px) minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid #dce5e6;
+  border-radius: 9px;
+  background: #fff;
+}
+.support-inbox-list {
+  min-width: 0;
+  border-right: 1px solid #e8eeee;
+}
+.support-inbox-list-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px;
+  border-bottom: 1px solid #e8eeee;
+  color: #244454;
+  font-size: 12px;
+}
+.support-inbox-list-heading span {
+  color: #718590;
+}
+.support-inbox-item {
+  display: grid;
+  width: 100%;
+  gap: 5px;
+  padding: 13px 15px;
+  border: 0;
+  border-bottom: 1px solid #edf1f2;
+  background: #fff;
+  color: #244454;
+  text-align: left;
+  cursor: pointer;
+}
+.support-inbox-item.active {
+  background: #edf7f3;
+}
+.support-inbox-item b {
+  font-size: 12px;
+}
+.support-inbox-item small,
+.support-inbox-item time {
+  color: #718590;
+  font-size: 10px;
+}
+.support-inbox-item > span {
+  overflow: hidden;
+  color: #526b76;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.support-inbox-thread {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+.support-inbox-thread > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 15px;
+  border-bottom: 1px solid #e8eeee;
+}
+.support-inbox-reply {
+  display: grid;
+  gap: 9px;
+  padding: 14px;
+  border-top: 1px solid #e8eeee;
+}
+.support-inbox-reply textarea {
+  font-family: inherit;
+}
 .mobile-search-toggle,
 .mobile-header-search {
   display: none;
@@ -2991,7 +3224,7 @@ footer a:not(.brand) {
     bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     left: 50%;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     width: min(440px, calc(100vw - 32px));
     min-height: 72px;
     padding: 5px 7px;
@@ -3094,6 +3327,33 @@ footer a:not(.brand) {
   .whatsapp-float-button {
     width: 58px;
     height: 58px;
+  }
+  .support-float {
+    right: 82px;
+    bottom: calc(15px + env(safe-area-inset-bottom, 0px));
+  }
+  .support-float-button {
+    width: 52px;
+    height: 52px;
+  }
+  .support-panel {
+    right: -67px;
+    bottom: 64px;
+    width: min(360px, calc(100vw - 30px));
+    max-height: calc(100svh - 100px);
+  }
+  .support-inbox {
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .support-inbox-list {
+    max-height: 220px;
+    overflow: auto;
+    border-right: 0;
+    border-bottom: 1px solid #e8eeee;
+  }
+  .support-inbox-thread {
+    min-height: 400px;
   }
   .admin-settings {
     grid-template-columns: 1fr;

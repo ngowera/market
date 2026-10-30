@@ -7,6 +7,8 @@ import {
   FileCheck2,
   Gavel,
   MessagesSquare,
+  MessageSquareText,
+  Send,
   CreditCard,
   PackageCheck,
   Scale,
@@ -97,6 +99,7 @@ const navigation = [
   ["Approvals", ShieldCheck],
   ["Auctions", Gavel],
   ["Offers", MessagesSquare],
+  ["Messages", MessageSquareText],
   ["Orders & payments", CreditCard],
   ["Release desk", PackageCheck],
   ["Settlements", Scale],
@@ -105,6 +108,19 @@ const navigation = [
   ["Users & security", Users],
   ["Configuration", Settings],
 ] as const;
+type SupportConversation = {
+  id: string;
+  customer_name: string;
+  customer_email: string;
+  status: string;
+  last_message_at: string;
+  messages: {
+    id: string;
+    sender: "customer" | "admin";
+    body: string;
+    created_at: string;
+  }[];
+};
 export default function Admin({ connected }: { connected: boolean }) {
   const [view, setView] = useState("Dashboard");
   const [staff, setStaff] = useState<any>(null);
@@ -122,6 +138,9 @@ export default function Admin({ connected }: { connected: boolean }) {
   const [reportGraphModes, setReportGraphModes] = useState<Record<string, "line" | "bar">>({});
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [supportConversations, setSupportConversations] = useState<SupportConversation[]>([]);
+  const [supportConversationId, setSupportConversationId] = useState("");
+  const [supportReply, setSupportReply] = useState("");
   useEffect(() => {
     if (connected)
       fetch("/api/session")
@@ -142,6 +161,34 @@ export default function Admin({ connected }: { connected: boolean }) {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [staff, view, success]);
+  useEffect(() => {
+    if (!staff || view !== "Messages") return;
+    let active = true;
+    const refresh = async () => {
+      try {
+        const response = await fetch("/api/admin/messages", { cache: "no-store" });
+        const data: unknown = await response.json();
+        if (!response.ok) throw Error((data as { error?: string }).error || "Could not load messages.");
+        if (!active) return;
+        if (!Array.isArray(data)) throw Error("Support inbox response is invalid.");
+        const conversations = data as SupportConversation[];
+        setSupportConversations(conversations);
+        setSupportConversationId((current) =>
+          conversations.some((conversation: any) => conversation.id === current)
+            ? current
+            : conversations[0]?.id || "",
+        );
+      } catch (failure) {
+        if (active) setError((failure as Error).message);
+      }
+    };
+    void refresh();
+    const timer = window.setInterval(refresh, 15000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [staff, view]);
   useEffect(() => {
     if (view !== "Listings") setSelectedListingIds([]);
   }, [view]);
@@ -279,7 +326,7 @@ export default function Admin({ connected }: { connected: boolean }) {
   ];
   const level = staff?.security_level || 0;
   const mobilePrimaryNavigation = navigation.filter(([title]) =>
-    ["Dashboard", "Collateral", "Listings", "Configuration"].includes(title) &&
+    ["Dashboard", "Collateral", "Listings", "Messages", "Configuration"].includes(title) &&
     (title !== "Configuration" || level >= 4),
   );
   const write = async (path: string, body: any) => {
@@ -321,6 +368,40 @@ export default function Admin({ connected }: { connected: boolean }) {
       setBusy(false);
     }
   };
+  const selectedSupportConversation = supportConversations.find(
+    (conversation) => conversation.id === supportConversationId,
+  );
+  async function sendSupportReply(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedSupportConversation) return;
+    setBusy(true);
+    setError("");
+    setSuccess("");
+    try {
+      const response = await fetch("/api/admin/message-reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversation_id: selectedSupportConversation.id,
+          message: supportReply,
+        }),
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw Error(result.error || "Could not send reply.");
+      setSupportReply("");
+      setSuccess("Reply sent to the customer.");
+      const refreshed = await fetch("/api/admin/messages", { cache: "no-store" });
+      const refreshedData = await refreshed.json() as { error?: string } | SupportConversation[];
+      if (!refreshed.ok) throw Error((refreshedData as { error?: string }).error || "Could not refresh inbox.");
+      if (!Array.isArray(refreshedData)) throw Error("Support inbox response is invalid.");
+      const conversations = refreshedData;
+      setSupportConversations(conversations);
+    } catch (failure) {
+      setError((failure as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
   function open(type: string, row?: any) {
     setError("");
     setSelected(row);
@@ -632,6 +713,70 @@ export default function Admin({ connected }: { connected: boolean }) {
             </p>
           )}
           {loading && <p className="muted">Loading authorized records…</p>}
+          {view === "Messages" && (
+            <section className="support-inbox" aria-label="Customer messages">
+              <div className="support-inbox-list">
+                <div className="support-inbox-list-heading">
+                  <b>Customer conversations</b>
+                  <span>{supportConversations.length}</span>
+                </div>
+                {supportConversations.length ? supportConversations.map((conversation: any) => {
+                  const latest = conversation.messages?.at(-1);
+                  return (
+                    <button
+                      className={`support-inbox-item ${conversation.id === supportConversationId ? "active" : ""}`}
+                      key={conversation.id}
+                      onClick={() => setSupportConversationId(conversation.id)}
+                    >
+                      <b>{conversation.customer_name}</b>
+                      <small>{conversation.customer_email}</small>
+                      <span>{latest?.body || "No messages yet"}</span>
+                      <time>{new Date(conversation.last_message_at).toLocaleString()}</time>
+                    </button>
+                  );
+                }) : <p className="support-empty">New customer messages will appear here.</p>}
+              </div>
+              <div className="support-inbox-thread">
+                {selectedSupportConversation ? (
+                  <>
+                    <header>
+                      <div>
+                        <b>{selectedSupportConversation.customer_name}</b>
+                        <span>{selectedSupportConversation.customer_email}</span>
+                      </div>
+                      <span className="badge green">{selectedSupportConversation.status}</span>
+                    </header>
+                    <div className="support-inbox-messages">
+                      {(selectedSupportConversation.messages || []).map((message: any) => (
+                        <article className={`support-message ${message.sender}`} key={message.id}>
+                          <span>{message.sender === "admin" ? "Staff" : selectedSupportConversation.customer_name}</span>
+                          <p>{message.body}</p>
+                          <time>{new Date(message.created_at).toLocaleString()}</time>
+                        </article>
+                      ))}
+                    </div>
+                    <form className="support-inbox-reply" onSubmit={sendSupportReply}>
+                      <label htmlFor="support-reply">Reply to customer</label>
+                      <textarea
+                        id="support-reply"
+                        value={supportReply}
+                        onChange={(event) => setSupportReply(event.target.value)}
+                        maxLength={2000}
+                        required
+                        rows={3}
+                      />
+                      <button className="btn primary" disabled={busy || !supportReply.trim()}>
+                        <Send size={15} />
+                        {busy ? "Sending…" : "Send reply"}
+                      </button>
+                    </form>
+                  </>
+                ) : (
+                  <p className="support-empty">Select a conversation to read and reply.</p>
+                )}
+              </div>
+            </section>
+          )}
           {view === "Dashboard" && (
             <>
               <div className="kpi-grid">
@@ -1729,6 +1874,7 @@ const descriptions: Record<string, string> = {
   Approvals: "Independent decisions for sensitive actions.",
   Auctions: "Monitor server-authoritative bids and closing windows.",
   Offers: "Review buyer offers and prepare counteroffers.",
+  Messages: "Read and reply to customer support conversations.",
   "Orders & payments": "Track payments and resolve verification exceptions.",
   "Release desk":
     "Verified payment, approved collection and accountable handover.",

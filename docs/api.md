@@ -8,6 +8,8 @@ All responses use JSON except hosted provider redirects. Mutations require same-
 | `GET /api/listings/:uuid` | Public-safe current state and masked bid history |
 | `POST /api/auth/login`, `/signup`, `/recover`, `/refresh`, `/logout`, `/mfa` | Supabase Auth; no custom password database |
 | `GET /api/session`, `/api/account` | Current identity / own records |
+| `POST /api/support/start`, `/api/support/reply` | Public support thread created with name/email and a browser-held conversation token |
+| `POST /api/support/read` | `{token}`; read messages in the matching private support thread |
 | `POST /api/bids` | `{listing_id, amount, terms:true}`; atomic verified bid |
 | `POST /api/offers` | `{listing_id, amount, note, terms:true}` |
 | `POST /api/offers/accept` | `{offer_id}`; accept own open seller counteroffer |
@@ -16,6 +18,8 @@ All responses use JSON except hosted provider redirects. Mutations require same-
 | `POST /api/payments/checkout` | `{order_id}`; authoritative order total; one active attempt |
 | `POST /api/payments/webhook` | PayChangu raw body authenticated by SHA-256 HMAC Signature |
 | `GET /api/admin/data` | Active staff level/MFA; RLS-scoped data |
+| `GET /api/admin/messages` | Active staff support inbox |
+| `POST /api/admin/message-reply` | Active staff reply; `{conversation_id, message}` |
 | `POST /api/admin/asset`, `/listing`, `/authorization` | Level 2 preparation requests; collateral may omit `external_loan_id` for a standalone sale |
 | `POST /api/admin/listing-image` | Active Level 2 staff session; multipart `file` (JPEG, PNG or WebP, maximum 5 MB), uploads to the public `listing-images` Storage bucket and returns its URL |
 | `POST /api/admin/cash-sale` | Level 3+ staff; `{listing_id, receipt_ref, buyer_name, buyer_contact?, reason}`; records exact listed price as cash, creates order/payment/settlement, marks asset sold, and appends an audit event |
