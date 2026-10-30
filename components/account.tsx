@@ -41,6 +41,13 @@ export default function Account({
   const [oauthClient, setOauthClient] = useState<any>(null);
   const [googleBusy, setGoogleBusy] = useState(false);
   const [authSuccess, setAuthSuccess] = useState(false);
+  const [avatarFailed, setAvatarFailed] = useState(false);
+  const avatarUrl = user?.user_metadata?.avatar_url || user?.user_metadata?.picture || "";
+  const isGoogleUser = (candidate: {
+    app_metadata?: { provider?: string; providers?: string[] };
+  } | null | undefined) =>
+    candidate?.app_metadata?.provider === "google" ||
+    candidate?.app_metadata?.providers?.includes("google");
 
   function safeReturnPath() {
     const requested =
@@ -62,6 +69,14 @@ export default function Account({
     if(r.status===401){const refreshed=await fetch("/api/auth/refresh",{method:"POST"});if(refreshed.ok)r=await fetch("/api/session");}
     if (r.ok) {
       const d: any = await r.json();
+      if (!staff && !isGoogleUser(d.user)) {
+        await fetch("/api/auth/logout", { method: "POST" });
+        await oauthClient?.auth.signOut();
+        setUser(null);
+        setData({});
+        setError("Buyer accounts now use Google sign-in. Please continue with Google.");
+        return;
+      }
       setUser(d.user);
       const returnPath = safeReturnPath();
       if (returnPath) {
@@ -295,22 +310,6 @@ export default function Account({
                 ? "Use your institution-assigned staff account."
                 : "Sign in to your nyasamarket.com buyer account."}
             </p>
-            {!staff && (
-              <div className="segmented">
-                <button
-                  className={mode === "login" ? "active" : ""}
-                  onClick={() => setMode("login")}
-                >
-                  Sign in
-                </button>
-                <button
-                  className={mode === "signup" ? "active" : ""}
-                  onClick={() => setMode("signup")}
-                >
-                  Create account
-                </button>
-              </div>
-            )}
             {!staff && mode !== "recover" && (
               <button
                 type="button"
@@ -322,8 +321,12 @@ export default function Account({
                 {googleBusy ? "Connecting to Google…" : "Continue with Google"}
               </button>
             )}
-            {!staff && mode !== "recover" && <div className="auth-divider"><span>or use email</span></div>}
-            <form onSubmit={auth} className="form-grid">
+            {!staff && (
+              <p className="muted google-only-note">
+                Google sign-in is required for buyer accounts and marketplace features.
+              </p>
+            )}
+            {staff && <form onSubmit={auth} className="form-grid">
               {mode === "signup" && (
                 <label>
                   Display name
@@ -378,13 +381,15 @@ export default function Account({
                       ? "Send recovery email"
                       : "Sign in securely"}
               </button>
-            </form>
-            <button
+            </form>}
+            {staff && <button
               className="text-button"
               onClick={() => setMode(mode === "recover" ? "login" : "recover")}
             >
               {mode === "recover" ? "Back to sign in" : "Forgot your password?"}
-            </button>
+            </button>}
+            {!staff && error && <p className="error">{error}</p>}
+            {!staff && success && <p className="success">{success}</p>}
             <p
               className="muted"
               style={{ fontSize: 10, marginTop: 20, lineHeight: 1.8 }}
@@ -416,6 +421,23 @@ export default function Account({
         <main className="page-wrap">
           <div className="section-top">
             <div>
+              <span className="account-profile-avatar">
+                {avatarUrl && !avatarFailed ? (
+                  <img
+                    src={avatarUrl}
+                    alt=""
+                    referrerPolicy="no-referrer"
+                    onError={() => setAvatarFailed(true)}
+                  />
+                ) : (
+                  <span>
+                    {(user.user_metadata?.full_name ||
+                      user.user_metadata?.name ||
+                      user.email ||
+                      "N").slice(0, 1).toUpperCase()}
+                  </span>
+                )}
+              </span>
               <div className="eyebrow">MY ACCOUNT</div>
               <h2>
                 Hello,{" "}

@@ -6,16 +6,16 @@ All responses use JSON except hosted provider redirects. Mutations require same-
 | --- | --- |
 | `GET /api/catalog` | Public-safe published catalogue |
 | `GET /api/listings/:uuid` | Public-safe current state and masked bid history |
-| `POST /api/auth/login`, `/signup`, `/recover`, `/refresh`, `/logout`, `/mfa` | Supabase Auth; no custom password database |
-| `GET /api/session`, `/api/account` | Current identity / own records |
-| `POST /api/support/start`, `/api/support/reply` | Public support thread created with name/email and a browser-held conversation token |
-| `POST /api/support/read` | `{token}`; read messages in the matching private support thread |
+| `POST /api/auth/login`, `/signup`, `/recover`, `/refresh`, `/logout`, `/mfa` | Supabase Auth; buyer sign-in is Google-only, staff use assigned credentials |
+| `GET /api/session`, `/api/account` | Current identity / own records; buyer account data requires Google identity |
+| `POST /api/support/start`, `/api/support/reply` | Google-authenticated support conversation; `{token, message}` and customer is bound to the verified Auth user |
+| `POST /api/support/read` | Google-authenticated `{token}`; read only the caller's support conversation |
 | `POST /api/bids` | `{listing_id, amount, terms:true}`; atomic verified bid |
 | `POST /api/offers` | `{listing_id, amount, note, terms:true}` |
 | `POST /api/offers/accept` | `{offer_id}`; accept own open seller counteroffer |
 | `POST /api/orders` | `{listing_id, terms:true}`; server-price reservation |
 | `POST /api/watchlist` | `{listing_id}`; toggle own saved listing |
-| `POST /api/payments/checkout` | `{order_id}`; authoritative order total; one active attempt |
+| `POST /api/payments/checkout` | `{order_id}`; authoritative order total; one active PayChangu hosted checkout session |
 | `POST /api/payments/webhook` | PayChangu raw body authenticated by SHA-256 HMAC Signature |
 | `GET /api/admin/data` | Active staff level/MFA; RLS-scoped data |
 | `GET /api/admin/messages` | Active staff support inbox |

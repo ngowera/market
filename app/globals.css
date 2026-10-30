@@ -219,6 +219,25 @@ small {
   font-size: 14px;
   font-weight: 700;
 }
+.account-profile-avatar {
+  display: inline-grid;
+  width: 52px;
+  height: 52px;
+  float: right;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #dce5e6;
+  border-radius: 50%;
+  background: #e8f7ef;
+  color: #176f5e;
+  font-size: 19px;
+  font-weight: 700;
+}
+.account-profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 .whatsapp-float {
   position: fixed;
   right: 28px;
@@ -1755,6 +1774,23 @@ footer a:not(.brand) {
   color: #728792;
   font-size: 12px;
   line-height: 1.6;
+}
+.checkout-terms {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-bottom: 16px;
+  color: #526b76;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.checkout-terms input {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+.checkout-terms a {
+  color: #087c68;
+  text-decoration: underline;
 }
 .checkout-whatsapp {
   display: flex;

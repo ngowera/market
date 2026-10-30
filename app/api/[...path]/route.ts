@@ -29,6 +29,15 @@ function json(d: any, status = 200) {
     },
   });
 }
+function requireGoogleBuyer(user: {
+  app_metadata?: { provider?: string; providers?: string[] };
+}) {
+  if (
+    user.app_metadata?.provider !== "google" &&
+    !user.app_metadata?.providers?.includes("google")
+  )
+    throw new Error("Sign in with Google to use buyer features.");
+}
 function cookie(res: Response, token: string, refresh?: string) {
   const headers = new Headers(res.headers);
   const secure = env("NODE_ENV") === "production" ? "; Secure" : "";
@@ -136,6 +145,7 @@ async function get(request: Request, path: string) {
   }
   if (path === "account") {
     const { user, token } = await currentUser(request);
+    requireGoogleBuyer(user);
     const [orders, bids, offers, watch, notifications, releases] =
       await Promise.all(
         [
@@ -489,31 +499,35 @@ async function post(request: Request, path: string) {
   const b: any = await request.json().catch(() => ({}));
   if (path === "support/read") {
     const d = z.object({ token: uuid }).parse(b);
-    return json(await rpc("support_read", { p_token: d.token }));
+    const { user, token } = await currentUser(request);
+    requireGoogleBuyer(user);
+    return json(await rpc("support_read", { p_token: d.token }, token));
   }
   if (path === "support/start") {
     const d = z.object({
       token: uuid,
-      name: z.string().trim().min(2).max(120),
-      email: z.string().trim().email().max(254),
       message: z.string().trim().min(1).max(2000),
     }).parse(b);
+    const { user, token } = await currentUser(request);
+    requireGoogleBuyer(user);
     return json(await rpc("support_start", {
       p_token: d.token,
-      p_name: d.name,
-      p_email: d.email,
+      p_name: "",
+      p_email: "",
       p_body: d.message,
-    }));
+    }, token));
   }
   if (path === "support/reply") {
     const d = z.object({
       token: uuid,
       message: z.string().trim().min(1).max(2000),
     }).parse(b);
+    const { user, token } = await currentUser(request);
+    requireGoogleBuyer(user);
     return json(await rpc("support_customer_reply", {
       p_token: d.token,
       p_body: d.message,
-    }));
+    }, token));
   }
   if (path === "auth/refresh") {
     const cookieRefresh = request.headers
@@ -543,6 +557,15 @@ async function post(request: Request, path: string) {
       method: "POST",
       body: JSON.stringify(d),
     });
+    const staffProfiles = await sb(
+      "/rest/v1/staff_profiles?user_id=eq." +
+        encodeURIComponent(auth.user.id) +
+        "&select=user_id",
+      {},
+      auth.access_token,
+    );
+    if (!staffProfiles.length)
+      throw new Error("Buyer accounts must sign in with Google.");
     return sessionResponse(
       request,
       { user: auth.user },
@@ -551,22 +574,7 @@ async function post(request: Request, path: string) {
     );
   }
   if (path === "auth/signup") {
-    const d = z
-      .object({
-        email: z.string().email(),
-        password: z.string().min(12),
-        display_name: z.string().min(1).max(80),
-      })
-      .parse(b);
-    const auth = await sb("/auth/v1/signup", {
-      method: "POST",
-      body: JSON.stringify({
-        email: d.email,
-        password: d.password,
-        data: { display_name: d.display_name },
-      }),
-    });
-    return json({ sent: true });
+    return json({ error: "Create a buyer account with Google sign-in." }, 403);
   }
   if (path === "auth/recover") {
     const email = z.string().email().parse(b.email);
@@ -669,6 +677,7 @@ async function post(request: Request, path: string) {
     return json(await rpc("sync_loan", { p_values: d }, undefined, true));
   }
   const { user, token } = await currentUser(request);
+  requireGoogleBuyer(user);
   if (path === "bids") {
     const d = z
       .object({ listing_id: uuid, amount, terms: z.literal(true) })
@@ -1109,7 +1118,9 @@ export async function GET(
       { error: message },
       message.includes("sign in")
         ? 401
-        : message.includes("permission") || message.includes("MFA")
+        : message.includes("permission") ||
+            message.includes("MFA") ||
+            message.includes("Google sign-in")
           ? 403
           : message.includes("not found")
             ? 404
@@ -1134,7 +1145,9 @@ export async function POST(
       { error: msg },
       msg.includes("sign in")
         ? 401
-        : msg.includes("permission") || msg.includes("MFA")
+        : msg.includes("permission") ||
+            msg.includes("MFA") ||
+            msg.includes("Google sign-in")
           ? 403
           : 400,
     );

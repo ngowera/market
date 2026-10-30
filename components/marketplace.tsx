@@ -23,7 +23,6 @@ import {
   PackageCheck,
   X,
   MessageCircle,
-  UsersRound,
   ExternalLink,
   UserRound,
 } from "lucide-react";
@@ -90,7 +89,7 @@ export function WhatsAppContact() {
         <div className="whatsapp-menu" id="whatsapp-contact-options">
           <div className="whatsapp-menu-heading">
             <b>How can we help?</b>
-            <span>Choose a WhatsApp contact</span>
+            <span>Choose a WhatsApp contact or message us directly here</span>
           </div>
           <a
             href="https://wa.me/265989148075?text=Hello%2C%20I%20need%20help%20with%20Nyasa%20Market."
@@ -101,18 +100,6 @@ export function WhatsAppContact() {
             <span className="whatsapp-link-copy">
               <b>Questions & help</b>
               <small>0989 148 075</small>
-            </span>
-            <ExternalLink size={15} />
-          </a>
-          <a
-            href="https://chat.whatsapp.com/D7OAaObZgHG0gs8fhb9Djk"
-            target="_blank"
-            rel="noreferrer"
-          >
-            <span className="whatsapp-menu-icon"><UsersRound size={18} /></span>
-            <span className="whatsapp-link-copy">
-              <b>Join the WhatsApp group</b>
-              <small>Community updates and discussion</small>
             </span>
             <ExternalLink size={15} />
           </a>
@@ -408,7 +395,7 @@ export function AssetCard({ item }: { item: Listing }) {
         <DialogContent>
           <DialogTitle>Sign in to save this asset</DialogTitle>
           <DialogDescription>
-            Sign in with Google or email to add assets to your personal watchlist.
+            Sign in with Google to add assets to your personal watchlist.
           </DialogDescription>
           <Link className="btn primary" href="/account">Sign in or create account</Link>
           <button className="text-button" onClick={() => setNotice(false)}>Keep browsing</button>

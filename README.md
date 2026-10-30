@@ -29,8 +29,8 @@ The workspace includes `.env`. Your Supabase URL is filled in; add `SUPABASE_ANO
 ## Implemented
 
 - Responsive public catalogue, search, category/method/location/condition/price filters, sorting, asset details, enlargement, defects, bid history, sharing and buying instructions.
-- Supabase buyer registration/sign-in/recovery requests, verified buyers, server cookies, watchlist, bids/offers/orders, notifications and checkout initiation.
-- Website support chat with private browser-held customer threads and staff replies in the admin Messages inbox; WhatsApp contact at 0989 148 075.
+- Google-only buyer sign-in, verified buyer sessions, server cookies, watchlist, bids/offers/orders, notifications and PayChangu checkout; staff continue to use assigned credentials.
+- Google-authenticated website support chat with customer-specific threads and staff replies in the admin Messages inbox; WhatsApp direct contact at 0989 148 075.
 - Staff portal with dashboard, collateral, listing preparation, sale authorization, maker-checker inbox, auctions, offers/counters, payments, release desk, settlements, audit, reporting, staff access and versioned policy requests.
 - PostgreSQL grants and RLS, four staff levels, AAL2 for senior staff, restricted private evidence storage, append-only audit/bids, authoritative row-locked bid placement, anti-sniping, server auction closure and fixed/accepted-offer reservations.
 - PayChangu hosted checkout adapter, SHA-256 HMAC webhook authentication, exact server verification, transactional/idempotent paid transition, settlement lines, approved settlement outbox and loan posting retries/dead-letter state.

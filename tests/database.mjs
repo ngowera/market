@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';import assert from 'node:assert/strict';
 process.on('uncaughtException',e=>{console.error('TEST FAILED:',e.message,'code:',e.code,'position:',e.position,'detail:',e.detail);process.exit(1)});
 const db=new PGlite();
 await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;
-create schema auth;create table auth.users(id uuid primary key,email varchar(255),email_confirmed_at timestamptz,phone_confirmed_at timestamptz,is_anonymous boolean default false);
+create schema auth;create table auth.users(id uuid primary key,email varchar(255),raw_user_meta_data jsonb default '{}',email_confirmed_at timestamptz,phone_confirmed_at timestamptz,is_anonymous boolean default false);
 create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
 create function auth.jwt() returns jsonb language sql stable as $$select coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb$$;
 grant usage on schema auth to anon,authenticated,service_role;grant execute on all functions in schema auth to anon,authenticated,service_role;
@@ -33,29 +33,35 @@ const releaseReportingMigration=await fs.readFile('supabase/migrations/202610093
 await db.exec(releaseReportingMigration);
 const supportMessagingMigration=await fs.readFile('supabase/migrations/20261030140000_support_messaging.sql','utf8');
 await db.exec(supportMessagingMigration);
+const googleBuyerMigration=await fs.readFile('supabase/migrations/20261031100000_google_buyer_checkout.sql','utf8');
+await db.exec(googleBuyerMigration);
 console.log('PASS: SQL installer executes and safely reruns on PostgreSQL');
 const maker='11111111-1111-4111-8111-111111111111',approver='22222222-2222-4222-8222-222222222222',buyer='33333333-3333-4333-8333-333333333333',other='44444444-4444-4444-8444-444444444444',noMfaStaff='55555555-5555-4555-8555-555555555555',secondLevel4='66666666-6666-4666-8666-666666666666';
 await db.exec(`insert into auth.users(id,email,email_confirmed_at) values('${maker}','maker@test.invalid',now()),('${approver}','approver@test.invalid',now()),('${buyer}','buyer@test.invalid',now()),('${other}','other@test.invalid',now()),('${noMfaStaff}','no-mfa@test.invalid',now()),('${secondLevel4}','second-level4@test.invalid',now());
 insert into public.staff_profiles(user_id,full_name,security_level,is_active,mfa_required) values('${maker}','Maker',2,true,false),('${approver}','Approver',3,true,true),('${noMfaStaff}','Admin without MFA',4,true,false),('${secondLevel4}','Second Level 4',4,true,false);
 insert into public.loans_bridge(id,source_system,external_loan_id,outstanding_amount) values('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','test','LN-1',850000);
 insert into public.collateral_assets(id,loan_bridge_id,asset_ref,title,category,created_by) values('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','COL-1','Test console','Gaming','${maker}');`);
-async function as(role,id,aal='aal2'){await db.exec(`reset role;select set_config('request.jwt.claim.sub','${id||''}',false);select set_config('request.jwt.claims','${JSON.stringify({role,aal})}',false);set role ${role};`)}
+async function as(role,id,aal='aal2',provider='google'){await db.exec(`reset role;select set_config('request.jwt.claim.sub','${id||''}',false);select set_config('request.jwt.claims','${JSON.stringify({role,aal,app_metadata:{provider,providers:[provider]}})}',false);set role ${role};`)}
 async function rejects(sql,pattern){try{await db.query(sql);assert.fail('Expected rejection: '+sql)}catch(e){assert.match(e.message,pattern)}}
 const supportToken='77777777-7777-4777-8777-777777777777';
 await as('anon');
 await rejects('select * from public.support_conversations',/permission denied/);
 await rejects('select * from public.support_messages',/permission denied/);
 await rejects('select public.support_admin_conversations()',/permission denied/);
-const supportStart=(await db.query(`select public.support_start('${supportToken}','Customer','customer@example.invalid','I need help') as result`)).rows[0].result;
+await rejects(`select public.support_start('${supportToken}','Customer','customer@example.invalid','I need help')`,/Google/);
+await as('authenticated',buyer);
+const supportStart=(await db.query(`select public.support_start('${supportToken}','','','I need help') as result`)).rows[0].result;
 assert.ok(supportStart.conversation_id);
 assert.equal((await db.query(`select jsonb_array_length(public.support_read('${supportToken}')->'messages') as count`)).rows[0].count,1);
 await db.query(`select public.support_customer_reply('${supportToken}','Following up')`);
 await rejects(`select public.support_read('88888888-8888-4888-8888-888888888888')`,/Conversation not found/);
+await as('authenticated',buyer,'aal2','email');
+await rejects(`select public.support_read('${supportToken}')`,/Google sign-in is required/);
 await as('authenticated',maker);
 const supportInbox=(await db.query('select public.support_admin_conversations() as conversations')).rows[0].conversations;
-assert.equal(supportInbox[0].customer_email,'customer@example.invalid');
+assert.equal(supportInbox[0].customer_email,'buyer@test.invalid');
 await db.query(`select public.support_admin_reply('${supportStart.conversation_id}','We are looking into this')`);
-await as('anon');
+await as('authenticated',buyer);
 const supportMessages=(await db.query(`select public.support_read('${supportToken}') as result`)).rows[0].result.messages;
 assert.deepEqual(supportMessages.map((message)=>message.sender),['customer','customer','admin']);
 console.log('PASS: support threads are private to their token and staff can reply');
@@ -73,6 +79,7 @@ await as('anon');assert.equal((await db.query('select * from public.public_catal
 await db.exec('reset role');const req=(await db.query(`select id from public.approval_requests where action_type='publish_listing'`)).rows[0].id;
 await as('authenticated',approver);await db.query(`select public.approve_action('${req}','approved','Publication review complete')`);
 await as('anon');const cat=(await db.query('select * from public.public_catalog')).rows[0];assert.equal(cat.title,'Test Console');assert.equal(cat.category,'Gaming');assert.equal(cat.external_loan_id,undefined);assert.equal(cat.borrower_reference,undefined);console.log('PASS: public catalogue preserves selected category and safe projection');
+await as('authenticated',buyer,'aal2','email');await rejects(`select public.place_bid('${listing.id}',100000)`,/Google sign-in is required/);
 await as('authenticated',buyer);await rejects(`insert into public.bids(auction_listing_id,bidder_id,amount) values('${listing.id}','${buyer}',100000)`,/permission denied/);
 await db.query(`select public.place_bid('${listing.id}',100000)`);await rejects(`select public.place_bid('${listing.id}',110000)`,/highest bidder/);await as('authenticated',other);await rejects(`select public.place_bid('${listing.id}',105000)`,/below/);await db.query(`select public.place_bid('${listing.id}',110000)`);console.log('PASS: bids use authoritative minimum and reject direct writes');
 await as('authenticated',maker);await rejects(`select public.request_change('listing_price_change','${listing.id}','{"price":125000,"reason":"Raise starting bid"}')`,/Starting bid is locked/);console.log('PASS: auction starting bid cannot change after bidding begins');
